@@ -1,0 +1,68 @@
+{
+  "name": "@jillen/analytics",
+  "version": "1.0.0",
+  "description": "Advanced analytics package for Next.js applications with bot detection and comprehensive tracking",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    },
+    "./server": {
+      "types": "./dist/server/index.d.ts",
+      "import": "./dist/server/index.mjs",
+      "require": "./dist/server/index.js"
+    },
+    "./client": {
+      "types": "./dist/client/index.d.ts",
+      "import": "./dist/client/index.mjs",
+      "require": "./dist/client/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "npm run clean && npm run build",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "analytics",
+    "nextjs",
+    "tracking",
+    "bot-detection",
+    "web-analytics",
+    "typescript"
+  ],
+  "author": "Jillen",
+  "license": "MIT",
+  "peerDependencies": {
+    "react": ">=18.0.0",
+    "next": ">=13.0.0"
+  },
+  "dependencies": {
+    "isbot": "^5.1.28"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/react": "^18.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jillen/analytics.git"
+  },
+  "bugs": {
+    "url": "https://github.com/jillen/analytics/issues"
+  },
+  "homepage": "https://github.com/jillen/analytics#readme"
+}

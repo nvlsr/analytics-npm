@@ -1,0 +1,30 @@
+# Source files
+*.ts
+*.tsx
+!*.d.ts
+
+# Config files
+tsconfig.json
+tsup.config.ts
+
+# Development files
+.git
+.gitignore
+node_modules
+*.log
+*.test.*
+*.spec.*
+
+# IDE files
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Build artifacts (keep only dist/)
+src/
+!dist/ 
