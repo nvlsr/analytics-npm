@@ -92,7 +92,7 @@ Add analytics tracking to your layout:
 
 ```typescript
 // app/layout.tsx
-import { headers } from "next/headers";
+import { headers } from "next/headers"; // Add this import if not already present
 import { parseAnalyticsHeaders } from "@jillen/analytics";
 import { AnalyticsProvider } from "@/components/analytics-provider";
 
