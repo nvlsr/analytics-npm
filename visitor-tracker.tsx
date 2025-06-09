@@ -218,7 +218,7 @@ export function VisitorTracker({
   // Send event to analytics system
   const sendAnalyticsEvent = useCallback(
     async (
-      eventType: "pageview" | "session_start" | "session_end",
+      eventType: "pageview" | "session_start",
       referrer?: string,
       customPath?: string
     ) => {
@@ -375,44 +375,6 @@ export function VisitorTracker({
           : undefined;
       sendAnalyticsEvent("pageview", referrer, currentPath);
       lastTrackedPath.current = currentPath;
-
-      // Setup session_end on page unload
-      const handleBeforeUnload = () => {
-        // Use sendBeacon for reliable delivery during page unload
-        const serverUrl = ANALYTICS_CONFIG.SERVER_URL;
-        const siteId = ANALYTICS_CONFIG.SITE_ID;
-
-        if (serverUrl && siteId) {
-          const clientData = getClientData();
-
-          // Use sendBeacon if available, otherwise skip (already on client due to window check)
-          if (typeof navigator !== "undefined" && navigator.sendBeacon) {
-            navigator.sendBeacon(
-              `${serverUrl}/api/log/ingest`,
-              JSON.stringify({
-                siteId,
-                path: currentPath,
-                visitorId: generateVisitorId(ip, userAgent),
-                sessionId: generateSessionId(),
-                eventType: "session_end",
-                sessionStartTime: clientData.sessionStartTime,
-              })
-            );
-          }
-
-          // Clear session storage
-          const sessionId = generateSessionId();
-          const sessionKey = `analytics_session_active_${sessionId}`;
-          localStorage.removeItem(sessionKey);
-        }
-      };
-
-      window.addEventListener("beforeunload", handleBeforeUnload);
-
-      // Cleanup on unmount
-      return () => {
-        window.removeEventListener("beforeunload", handleBeforeUnload);
-      };
     }
 
     // Handle route changes (client-side navigation)
