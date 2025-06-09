@@ -1,6 +1,8 @@
 "use client";
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 import React, { useEffect, useRef, useCallback } from "react";
+import { usePathname } from "next/navigation";
 import { isbot } from "isbot";
 import {
   ANALYTICS_CONFIG,
@@ -45,7 +47,9 @@ export function VisitorTracker({
   edgeRegion,
   cacheStatus,
 }: VisitorTrackerProps) {
+  const pathname = usePathname();
   const isInitialized = useRef<boolean>(false);
+  const lastTrackedPath = useRef<string>(route);
 
   // Check if this is a bot environment
   const checkIfBot = useCallback(() => {
@@ -332,9 +336,6 @@ export function VisitorTracker({
     // SSR Guard: Only run on client
     if (typeof window === "undefined") return;
 
-    // Prevent multiple initializations
-    if (isInitialized.current) return;
-
     // Only track in production environment
     const isProduction =
       process.env.NEXT_PUBLIC_VERCEL_ENV === "production" ||
@@ -350,74 +351,94 @@ export function VisitorTracker({
       return;
     }
 
-    isInitialized.current = true;
+    const currentPath = pathname || route;
 
-    const sessionId = generateSessionId();
-    const sessionKey = `analytics_session_active_${sessionId}`;
-    const isSessionActive = localStorage.getItem(sessionKey);
+    // Initial setup on first load
+    if (!isInitialized.current) {
+      isInitialized.current = true;
 
-    // Send session_start if this is a new session
-    if (!isSessionActive) {
-      sendAnalyticsEvent("session_start");
-      localStorage.setItem(sessionKey, "true");
+      const sessionId = generateSessionId();
+      const sessionKey = `analytics_session_active_${sessionId}`;
+      const isSessionActive = localStorage.getItem(sessionKey);
+
+      // Send session_start if this is a new session
+      if (!isSessionActive) {
+        sendAnalyticsEvent("session_start");
+        localStorage.setItem(sessionKey, "true");
+      }
+
+      // Track initial pageview
+      const referrer =
+        document.referrer && document.referrer.length > 0
+          ? document.referrer
+          : undefined;
+      sendAnalyticsEvent("pageview", referrer);
+      lastTrackedPath.current = currentPath;
+
+      // Setup session_end on page unload
+      const handleBeforeUnload = () => {
+        // Use sendBeacon for reliable delivery during page unload
+        const serverUrl = ANALYTICS_CONFIG.SERVER_URL;
+        const siteId = ANALYTICS_CONFIG.SITE_ID;
+
+        if (serverUrl && siteId) {
+          const clientData = getClientData();
+          const eventData = {
+            siteId,
+            path: currentPath,
+            visitorId: generateVisitorId(ip, userAgent),
+            sessionId: generateSessionId(),
+            eventType: "session_end",
+            isNewVisitor: clientData.isNewVisitor,
+            screenResolution: clientData.screenResolution,
+            viewportSize: clientData.viewportSize,
+            connectionType: clientData.connectionType,
+            clientTimeZone: clientData.clientTimeZone,
+            sessionStartTime: clientData.sessionStartTime,
+            ipAddress: ip,
+            userAgent,
+          };
+
+          // Use sendBeacon if available, otherwise skip (already on client due to window check)
+          if (typeof navigator !== "undefined" && navigator.sendBeacon) {
+            navigator.sendBeacon(
+              `${serverUrl}/api/log/ingest`,
+              JSON.stringify({
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                ...eventData,
+              })
+            );
+          }
+
+          // Clear session storage
+          const sessionId = generateSessionId();
+          const sessionKey = `analytics_session_active_${sessionId}`;
+          localStorage.removeItem(sessionKey);
+        }
+      };
+
+      window.addEventListener("beforeunload", handleBeforeUnload);
+
+      // Cleanup on unmount
+      return () => {
+        window.removeEventListener("beforeunload", handleBeforeUnload);
+      };
     }
 
-    // Track pageview for this route
-    const referrer =
-      document.referrer && document.referrer.length > 0
-        ? document.referrer
-        : undefined;
-    sendAnalyticsEvent("pageview", referrer);
+    // Handle route changes (client-side navigation)
+    if (currentPath !== lastTrackedPath.current) {
+      // Track pageview for route change
+      sendAnalyticsEvent("pageview");
+      lastTrackedPath.current = currentPath;
+    }
 
-    // Setup session_end on page unload
-    const handleBeforeUnload = () => {
-      // Use sendBeacon for reliable delivery during page unload
-      const serverUrl = ANALYTICS_CONFIG.SERVER_URL;
-      const siteId = ANALYTICS_CONFIG.SITE_ID;
-
-      if (serverUrl && siteId) {
-        const clientData = getClientData();
-        const eventData = {
-          siteId,
-          path: route,
-          visitorId: generateVisitorId(ip, userAgent),
-          sessionId: generateSessionId(),
-          eventType: "session_end",
-          isNewVisitor: clientData.isNewVisitor,
-          screenResolution: clientData.screenResolution,
-          viewportSize: clientData.viewportSize,
-          connectionType: clientData.connectionType,
-          clientTimeZone: clientData.clientTimeZone,
-          sessionStartTime: clientData.sessionStartTime,
-          ipAddress: ip,
-          userAgent,
-        };
-
-        // Use sendBeacon if available, otherwise skip (already on client due to window check)
-        if (typeof navigator !== "undefined" && navigator.sendBeacon) {
-          navigator.sendBeacon(
-            `${serverUrl}/api/log/ingest`,
-            JSON.stringify({
-              headers: {
-                "Content-Type": "application/json",
-              },
-              ...eventData,
-            })
-          );
-        }
-
-        // Clear session storage
-        localStorage.removeItem(sessionKey);
-      }
-    };
-
-    window.addEventListener("beforeunload", handleBeforeUnload);
-
-    // Cleanup on unmount or route change
-    return () => {
-      window.removeEventListener("beforeunload", handleBeforeUnload);
-    };
+    // Return undefined for useEffect when no cleanup is needed
+    return;
   }, [
+    pathname,
+    route,
     ip,
     country,
     city,
@@ -430,14 +451,13 @@ export function VisitorTracker({
     host,
     protocol,
     deploymentUrl,
-    route,
     userAgent,
     edgeRegion,
     cacheStatus,
     sendAnalyticsEvent,
     getClientData,
     checkIfBot,
-  ]); // Re-run if route changes
+  ]); // Re-run if pathname or route changes
 
   return null; // This component renders nothing
 }
