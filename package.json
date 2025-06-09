@@ -45,17 +45,17 @@
   "author": "Jillen",
   "license": "MIT",
   "peerDependencies": {
-    "react": ">=18.0.0",
-    "next": ">=13.0.0"
+    "react": "^19.1.0",
+    "next": "^15.3.3"
   },
   "dependencies": {
     "isbot": "^5.1.28"
   },
   "devDependencies": {
-    "@types/node": "^20.0.0",
-    "@types/react": "^18.0.0",
-    "tsup": "^8.0.0",
-    "typescript": "^5.0.0"
+    "@types/node": "^20.19.0",
+    "@types/react": "^18.3.23",
+    "tsup": "^8.5.0",
+    "typescript": "^5.8.3"
   },
   "repository": {
     "type": "git",
