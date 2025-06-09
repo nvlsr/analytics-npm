@@ -219,7 +219,8 @@ export function VisitorTracker({
   const sendAnalyticsEvent = useCallback(
     async (
       eventType: "pageview" | "session_start" | "session_end",
-      referrer?: string
+      referrer?: string,
+      customPath?: string
     ) => {
       // Only run in production (temporarily disabled for debugging)
       if (process.env.NODE_ENV !== "production" && false) {
@@ -267,7 +268,7 @@ export function VisitorTracker({
           mode: "cors",
           body: JSON.stringify({
             siteId,
-            path: route,
+            path: customPath || route,
             visitorId: generateVisitorId(ip, userAgent),
             sessionId: generateSessionId(),
             eventType,
@@ -363,7 +364,7 @@ export function VisitorTracker({
 
       // Send session_start if this is a new session
       if (!isSessionActive) {
-        sendAnalyticsEvent("session_start");
+        sendAnalyticsEvent("session_start", undefined, currentPath);
         localStorage.setItem(sessionKey, "true");
       }
 
@@ -372,7 +373,7 @@ export function VisitorTracker({
         document.referrer && document.referrer.length > 0
           ? document.referrer
           : undefined;
-      sendAnalyticsEvent("pageview", referrer);
+      sendAnalyticsEvent("pageview", referrer, currentPath);
       lastTrackedPath.current = currentPath;
 
       // Setup session_end on page unload
@@ -430,7 +431,7 @@ export function VisitorTracker({
     // Handle route changes (client-side navigation)
     if (currentPath !== lastTrackedPath.current) {
       // Track pageview for route change
-      sendAnalyticsEvent("pageview");
+      sendAnalyticsEvent("pageview", undefined, currentPath);
       lastTrackedPath.current = currentPath;
     }
 
