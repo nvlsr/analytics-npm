@@ -1,5 +1,5 @@
-// Main package exports - Pre-made Client Component
-export { Analytics, type AnalyticsProps } from './analytics';
+// Main package exports - Internal Tracker for User Wrappers
+export { VisitorTracker, type VisitorTrackerProps } from './visitor-tracker';
 
 // Utility exports for header parsing and configuration
 export { parseAnalyticsHeaders } from './server/header-parser';
@@ -11,5 +11,4 @@ export * as client from './client';
 export * as server from './server';
 
 export { trackBotVisit } from './analytics-bot-utils';
-export { type ParsedAnalyticsHeaders } from './server/header-parser';
-export { type VisitorTrackerProps } from './analytics-provider'; 
+export { type ParsedAnalyticsHeaders } from './server/header-parser'; 

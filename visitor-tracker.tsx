@@ -27,7 +27,7 @@ export interface VisitorTrackerProps {
   cacheStatus?: "HIT" | "MISS" | "BYPASS" | "STALE" | null;
 }
 
-export function AnalyticsProvider({
+export function VisitorTracker({
   ip,
   country,
   city,

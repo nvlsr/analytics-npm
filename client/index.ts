@@ -1,2 +1,2 @@
 // Client-side analytics components
-export { AnalyticsProvider } from '../analytics-provider'; 
+export { VisitorTracker, type VisitorTrackerProps } from '../visitor-tracker'; 
