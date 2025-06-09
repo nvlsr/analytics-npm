@@ -30,7 +30,6 @@
   },
   "include": [
     "./index.ts",
-    "./analytics.tsx",
     "./analytics-provider.tsx",
     "./analytics-constants.ts",
     "./analytics-bot-utils.ts",
