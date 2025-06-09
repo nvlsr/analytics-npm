@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useCallback } from "react";
+import React, { useEffect, useRef, useCallback } from "react";
 import { isbot } from "isbot";
 import {
   ANALYTICS_CONFIG,
@@ -111,6 +111,18 @@ export function AnalyticsProvider({
 
   // Get enhanced client-side data
   const getClientData = useCallback(() => {
+    // SSR Guard: Return safe defaults if running on server
+    if (typeof window === "undefined") {
+      return {
+        isNewVisitor: true,
+        screenResolution: null,
+        viewportSize: null,
+        connectionType: null,
+        clientTimeZone: null,
+        sessionStartTime: new Date().toISOString(),
+      };
+    }
+
     // Check if this is a new visitor
     const visitorId = generateVisitorId(ip, userAgent);
     const isReturning = localStorage.getItem(`analytics_visitor_${visitorId}`);
@@ -137,7 +149,7 @@ export function AnalyticsProvider({
       );
     }
 
-    // Get screen and viewport data
+    // Get screen and viewport data (safe now that we're client-side)
     const screenResolution = `${screen.width}x${screen.height}`;
     const viewportSize = `${window.innerWidth}x${window.innerHeight}`;
 
@@ -188,11 +200,17 @@ export function AnalyticsProvider({
 
       const endpoint = `${serverUrl}/api/log/ingest`;
 
-      // Extract standard client-side data
+      // Extract standard client-side data with SSR guards
       const language =
-        navigator.language || navigator.languages?.[0] || undefined;
-      const doNotTrack = navigator.doNotTrack === "1";
-      const isMobile = /Mobi|Android/i.test(navigator.userAgent);
+        typeof navigator !== "undefined"
+          ? navigator.language || navigator.languages?.[0] || undefined
+          : undefined;
+      const doNotTrack =
+        typeof navigator !== "undefined" ? navigator.doNotTrack === "1" : false;
+      const isMobile =
+        typeof navigator !== "undefined"
+          ? /Mobi|Android/i.test(navigator.userAgent)
+          : /Mobi|Android/i.test(userAgent); // Fallback to server userAgent
 
       // Get enhanced client data
       const clientData = getClientData();
@@ -285,6 +303,9 @@ export function AnalyticsProvider({
 
   // Setup activity listeners
   useEffect(() => {
+    // SSR Guard: Only run on client
+    if (typeof document === "undefined") return;
+
     const events = [
       "mousedown",
       "mousemove",
@@ -307,6 +328,9 @@ export function AnalyticsProvider({
 
   // Handle page visibility changes
   useEffect(() => {
+    // SSR Guard: Only run on client
+    if (typeof document === "undefined") return;
+
     const handleVisibilityChange = () => {
       if (document.hidden) {
         isActive.current = false;
@@ -324,6 +348,9 @@ export function AnalyticsProvider({
 
   // Track session start, pageview and setup heartbeat
   useEffect(() => {
+    // SSR Guard: Only run on client
+    if (typeof window === "undefined") return;
+
     // Prevent multiple initializations
     if (isInitialized.current) return;
 
@@ -400,15 +427,18 @@ export function AnalyticsProvider({
           userAgent,
         };
 
-        navigator.sendBeacon(
-          `${serverUrl}/api/log/ingest`,
-          JSON.stringify({
-            headers: {
-              "Content-Type": "application/json",
-            },
-            ...eventData,
-          })
-        );
+        // Use sendBeacon if available, otherwise skip (already on client due to window check)
+        if (typeof navigator !== "undefined" && navigator.sendBeacon) {
+          navigator.sendBeacon(
+            `${serverUrl}/api/log/ingest`,
+            JSON.stringify({
+              headers: {
+                "Content-Type": "application/json",
+              },
+              ...eventData,
+            })
+          );
+        }
 
         // Clear session storage
         localStorage.removeItem(sessionKey);
