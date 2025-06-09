@@ -384,31 +384,18 @@ export function VisitorTracker({
 
         if (serverUrl && siteId) {
           const clientData = getClientData();
-          const eventData = {
-            siteId,
-            path: currentPath,
-            visitorId: generateVisitorId(ip, userAgent),
-            sessionId: generateSessionId(),
-            eventType: "session_end",
-            isNewVisitor: clientData.isNewVisitor,
-            screenResolution: clientData.screenResolution,
-            viewportSize: clientData.viewportSize,
-            connectionType: clientData.connectionType,
-            clientTimeZone: clientData.clientTimeZone,
-            sessionStartTime: clientData.sessionStartTime,
-            ipAddress: ip,
-            userAgent,
-          };
 
           // Use sendBeacon if available, otherwise skip (already on client due to window check)
           if (typeof navigator !== "undefined" && navigator.sendBeacon) {
             navigator.sendBeacon(
               `${serverUrl}/api/log/ingest`,
               JSON.stringify({
-                headers: {
-                  "Content-Type": "application/json",
-                },
-                ...eventData,
+                siteId,
+                path: currentPath,
+                visitorId: generateVisitorId(ip, userAgent),
+                sessionId: generateSessionId(),
+                eventType: "session_end",
+                sessionStartTime: clientData.sessionStartTime,
               })
             );
           }
