@@ -1,7 +1,26 @@
 /**
  * Server-side utility to parse analytics data from Next.js headers
  */
-export function parseAnalyticsHeaders(headers: Headers) {
+
+export interface ParsedAnalyticsHeaders {
+  ip: string;
+  country: string | null;
+  city: string | null;
+  region: string | null;
+  continent: string | null;
+  latitude: string | null;
+  longitude: string | null;
+  timezone: string | null;
+  postalCode: string | null;
+  host: string | null;
+  protocol: "http" | "https" | null;
+  deploymentUrl: string | null;
+  userAgent: string;
+  edgeRegion: string | null;
+  cacheStatus: "HIT" | "MISS" | "BYPASS" | "STALE" | null;
+}
+
+export function parseAnalyticsHeaders(headers: Headers): ParsedAnalyticsHeaders {
   const ip = headers.get("x-forwarded-for") || headers.get("x-real-ip") || "unknown";
   const country = headers.get("x-vercel-ip-country") || null;
   const userAgent = headers.get("user-agent") || "";

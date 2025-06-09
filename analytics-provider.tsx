@@ -7,7 +7,7 @@ import {
   validateAnalyticsConfig,
 } from "./analytics-constants";
 
-interface VisitorTrackerProps {
+export interface VisitorTrackerProps {
   ip: string;
   country: string | null;
   city: string | null;
