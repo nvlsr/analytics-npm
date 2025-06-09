@@ -1,17 +1,5 @@
-import dynamic from "next/dynamic";
+import { AnalyticsClientWrapper } from "./analytics-client-wrapper";
 import { parseAnalyticsHeaders } from "./server/header-parser";
-
-// Dynamically import the client component with SSR disabled
-const AnalyticsProvider = dynamic(
-  () =>
-    import("./analytics-provider").then((mod) => ({
-      default: mod.AnalyticsProvider,
-    })),
-  {
-    ssr: false, // Prevent server-side rendering to avoid React bundling issues
-    loading: () => null, // No loading spinner needed for analytics
-  }
-);
 
 interface AnalyticsWrapperProps {
   headers: Headers;
@@ -29,5 +17,5 @@ export async function JillenAnalytics({
   // Extract all required analytics data from headers
   const analyticsData = parseAnalyticsHeaders(headers);
 
-  return <AnalyticsProvider {...analyticsData} route={route} />;
+  return <AnalyticsClientWrapper {...analyticsData} route={route} />;
 }
