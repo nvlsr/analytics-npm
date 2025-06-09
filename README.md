@@ -67,34 +67,14 @@ export const config = {
 };
 ```
 
-### Step 3: Create Client Analytics Component
-
-Create a client component to handle analytics:
-
-```typescript
-// components/client-analytics.tsx
-"use client";
-import { AnalyticsProvider } from '@jillen/analytics';
-
-interface ClientAnalyticsProps {
-  analyticsData: any;
-  route: string;
-}
-
-export function ClientAnalytics({ analyticsData, route }: ClientAnalyticsProps) {
-  return <AnalyticsProvider {...analyticsData} route={route} />;
-}
-```
-
-### Step 4: Update Root Layout
+### Step 3: Update Root Layout
 
 Add analytics tracking to your layout:
 
 ```typescript
 // app/layout.tsx
 import { headers } from "next/headers";
-import { parseAnalyticsHeaders } from "@jillen/analytics";
-import { ClientAnalytics } from "@/components/client-analytics";
+import { parseAnalyticsHeaders, Analytics } from "@jillen/analytics";
 
 export const dynamic = "force-dynamic";
 
@@ -110,7 +90,7 @@ export default async function RootLayout({
   return (
     <html lang="en">
       <body>
-        <ClientAnalytics analyticsData={analyticsData} route={pathname} />
+        <Analytics analyticsData={analyticsData} route={pathname} />
         {children}
       </body>
     </html>
@@ -118,6 +98,6 @@ export default async function RootLayout({
 }
 ```
 
-### Step 5: Deploy
+### Step 4: Deploy
 
 Deploy to production. Analytics automatically activates based on environment detection.
