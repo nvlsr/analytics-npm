@@ -45,9 +45,6 @@ export function VisitorTracker({
   edgeRegion,
   cacheStatus,
 }: VisitorTrackerProps) {
-  const heartbeatInterval = useRef<NodeJS.Timeout | null>(null);
-  const lastActivity = useRef<number>(Date.now());
-  const isActive = useRef<boolean>(true);
   const isInitialized = useRef<boolean>(false);
 
   // Check if this is a bot environment
@@ -98,15 +95,50 @@ export function VisitorTracker({
       .substring(0, 16);
   };
 
-  const generateSessionId = (ip: string): string => {
-    const now = new Date();
-    const sessionWindow = 30 * 60 * 1000; // 30 minutes
-    const sessionTimestamp =
-      Math.floor(now.getTime() / sessionWindow) * sessionWindow;
-    const combined = `${ip}:${sessionTimestamp}`;
-    return btoa(combined)
-      .replace(/[^a-zA-Z0-9]/g, "")
-      .substring(0, 16);
+  const generateSessionId = (): string => {
+    // Check for existing session ID in sessionStorage
+    if (typeof window !== "undefined") {
+      const existingSessionId = sessionStorage.getItem("analytics_session_id");
+      if (existingSessionId) {
+        return existingSessionId;
+      }
+    }
+
+    // Generate new lightweight session ID
+    const generateLightweightId = (): string => {
+      try {
+        // Use crypto.getRandomValues() for secure randomness
+        const array = new Uint8Array(4);
+        crypto.getRandomValues(array);
+
+        // Convert to base36 and combine with timestamp
+        const timestamp = Date.now().toString(36).slice(-4); // Last 4 chars of timestamp in base36
+        const randomPart = Array.from(array)
+          .map((byte) => byte.toString(36))
+          .join("")
+          .slice(0, 4); // Take first 4 chars
+
+        return `${timestamp}${randomPart}`.substring(0, 8);
+      } catch {
+        // Fallback to Math.random() if crypto is unavailable
+        const timestamp = Date.now().toString(36).slice(-4);
+        const randomPart = Math.random().toString(36).substring(2, 6);
+        return `${timestamp}${randomPart}`.substring(0, 8);
+      }
+    };
+
+    const newSessionId = generateLightweightId();
+
+    // Store in sessionStorage (persists across page loads, expires with browser session)
+    if (typeof window !== "undefined") {
+      try {
+        sessionStorage.setItem("analytics_session_id", newSessionId);
+      } catch {
+        // Continue without storage if sessionStorage is disabled
+      }
+    }
+
+    return newSessionId;
   };
 
   // Get enhanced client-side data
@@ -137,7 +169,7 @@ export function VisitorTracker({
     }
 
     // Get session start time (persistent for this session)
-    const sessionId = generateSessionId(ip);
+    const sessionId = generateSessionId();
     let sessionStartTime = localStorage.getItem(
       `analytics_session_start_${sessionId}`
     );
@@ -182,7 +214,7 @@ export function VisitorTracker({
   // Send event to analytics system
   const sendAnalyticsEvent = useCallback(
     async (
-      eventType: "pageview" | "session_start" | "session_end" | "heartbeat",
+      eventType: "pageview" | "session_start" | "session_end",
       referrer?: string
     ) => {
       // Only run in production (temporarily disabled for debugging)
@@ -233,7 +265,7 @@ export function VisitorTracker({
             siteId,
             path: route,
             visitorId: generateVisitorId(ip, userAgent),
-            sessionId: generateSessionId(ip),
+            sessionId: generateSessionId(),
             eventType,
             // Enhanced client-side fields
             isNewVisitor: clientData.isNewVisitor,
@@ -295,58 +327,7 @@ export function VisitorTracker({
     ]
   );
 
-  // Track user activity for heartbeat
-  const updateActivity = () => {
-    lastActivity.current = Date.now();
-    isActive.current = true;
-  };
-
-  // Setup activity listeners
-  useEffect(() => {
-    // SSR Guard: Only run on client
-    if (typeof document === "undefined") return;
-
-    const events = [
-      "mousedown",
-      "mousemove",
-      "keypress",
-      "scroll",
-      "touchstart",
-      "click",
-    ];
-
-    events.forEach((event) => {
-      document.addEventListener(event, updateActivity, { passive: true });
-    });
-
-    return () => {
-      events.forEach((event) => {
-        document.removeEventListener(event, updateActivity);
-      });
-    };
-  }, []);
-
-  // Handle page visibility changes
-  useEffect(() => {
-    // SSR Guard: Only run on client
-    if (typeof document === "undefined") return;
-
-    const handleVisibilityChange = () => {
-      if (document.hidden) {
-        isActive.current = false;
-      } else {
-        updateActivity();
-      }
-    };
-
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-
-    return () => {
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-    };
-  }, []);
-
-  // Track session start, pageview and setup heartbeat
+  // Track session start, pageview and setup session end
   useEffect(() => {
     // SSR Guard: Only run on client
     if (typeof window === "undefined") return;
@@ -371,7 +352,7 @@ export function VisitorTracker({
 
     isInitialized.current = true;
 
-    const sessionId = generateSessionId(ip);
+    const sessionId = generateSessionId();
     const sessionKey = `analytics_session_active_${sessionId}`;
     const isSessionActive = localStorage.getItem(sessionKey);
 
@@ -388,21 +369,6 @@ export function VisitorTracker({
         : undefined;
     sendAnalyticsEvent("pageview", referrer);
 
-    // Setup heartbeat interval (every 30 seconds)
-    heartbeatInterval.current = setInterval(() => {
-      const timeSinceActivity = Date.now() - lastActivity.current;
-      const maxInactiveTime = 5 * 60 * 1000; // 5 minutes
-
-      // Only send heartbeat if user was active recently and page is visible
-      if (
-        timeSinceActivity < maxInactiveTime &&
-        isActive.current &&
-        !document.hidden
-      ) {
-        sendAnalyticsEvent("heartbeat");
-      }
-    }, 30000); // 30 seconds
-
     // Setup session_end on page unload
     const handleBeforeUnload = () => {
       // Use sendBeacon for reliable delivery during page unload
@@ -415,7 +381,7 @@ export function VisitorTracker({
           siteId,
           path: route,
           visitorId: generateVisitorId(ip, userAgent),
-          sessionId: generateSessionId(ip),
+          sessionId: generateSessionId(),
           eventType: "session_end",
           isNewVisitor: clientData.isNewVisitor,
           screenResolution: clientData.screenResolution,
@@ -449,9 +415,6 @@ export function VisitorTracker({
 
     // Cleanup on unmount or route change
     return () => {
-      if (heartbeatInterval.current) {
-        clearInterval(heartbeatInterval.current);
-      }
       window.removeEventListener("beforeunload", handleBeforeUnload);
     };
   }, [

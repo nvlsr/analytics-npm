@@ -74,10 +74,10 @@ Create a client component to handle analytics:
 ```typescript
 // components/analytics-provider.tsx
 "use client";
-import { VisitorTracker } from '@jillen/analytics';
+import { VisitorTracker, type ParsedAnalyticsHeaders } from '@jillen/analytics';
 
 interface AnalyticsProviderProps {
-  analyticsData: any;
+  analyticsData: ParsedAnalyticsHeaders;
   route: string;
 }
 
