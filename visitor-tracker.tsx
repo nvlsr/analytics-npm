@@ -159,21 +159,39 @@ export function VisitorTracker({
       };
     }
 
-    // Check if this is a new visitor
+    // Check if this is a new visitor using session-level caching
     const visitorId = generateVisitorId(ip, userAgent);
-    const isReturning = localStorage.getItem(`analytics_visitor_${visitorId}`);
-    const isNewVisitor = !isReturning;
+    const sessionId = generateSessionId();
+    const sessionCacheKey = `isNewVisitor_${sessionId}`;
 
-    // Mark as returning visitor for future visits
-    if (isNewVisitor) {
-      localStorage.setItem(
-        `analytics_visitor_${visitorId}`,
-        Date.now().toString()
+    // Check if we already determined isNewVisitor for this session
+    const cachedIsNewVisitor = sessionStorage.getItem(sessionCacheKey);
+    let isNewVisitor: boolean;
+
+    if (cachedIsNewVisitor === null) {
+      // First event in this session - make the determination
+      const visitorExists = localStorage.getItem(
+        `analytics_visitor_${visitorId}`
       );
+      isNewVisitor = !visitorExists;
+
+      // Cache the decision for this entire session
+      sessionStorage.setItem(sessionCacheKey, isNewVisitor.toString());
+
+      // Mark visitor as seen for future sessions (only if they're new)
+      if (isNewVisitor) {
+        localStorage.setItem(
+          `analytics_visitor_${visitorId}`,
+          Date.now().toString()
+        );
+      }
+    } else {
+      // Use the cached decision from earlier in this session
+      isNewVisitor = cachedIsNewVisitor === "true";
     }
 
     // Get session start time (persistent for this session)
-    const sessionId = generateSessionId();
+    // Note: reusing sessionId from above
     let sessionStartTime = localStorage.getItem(
       `analytics_session_start_${sessionId}`
     );
@@ -375,10 +393,11 @@ export function VisitorTracker({
           : undefined;
       sendAnalyticsEvent("pageview", referrer, currentPath);
       lastTrackedPath.current = currentPath;
-    }
 
+      // No cleanup needed - sessions end naturally through timeout logic
+    }
     // Handle route changes (client-side navigation)
-    if (currentPath !== lastTrackedPath.current) {
+    else if (currentPath !== lastTrackedPath.current) {
       // Track pageview for route change
       sendAnalyticsEvent("pageview", undefined, currentPath);
       lastTrackedPath.current = currentPath;
