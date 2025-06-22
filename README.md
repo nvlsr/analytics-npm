@@ -18,7 +18,7 @@ Advanced analytics package for Next.js applications with intelligent bot detecti
 
 **Next.js project** with middleware and app router support
 
-## Installation
+## Installatio
 
 ### Environment Variables
 
