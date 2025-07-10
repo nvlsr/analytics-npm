@@ -16,7 +16,8 @@ export function setupAnalyticsMiddleware(request: NextRequest) {
   
   // Track bot visits if this is a bot
   const userAgent = request.headers.get('user-agent') || '';
-  if (isbot(userAgent)) {
+  const isVercelBot = /vercel/i.test(userAgent);
+  if (isbot(userAgent) && !isVercelBot) {
     trackBotVisit(request, pathname);
   }
   
