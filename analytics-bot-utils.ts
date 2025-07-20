@@ -2,13 +2,11 @@ import type { NextRequest } from 'next/server';
 import { ANALYTICS_CONFIG, validateAnalyticsConfig } from './analytics-constants';
 
 /**
- * Simplified Bot Tracking Utility
- * 
  * Fire-and-forget bot tracking with minimal data collection.
- * Designed for performance and reliability - no complex calculations.
+ * Designed for performance and reliability.
  */
 
-// Simple hash generation for bot IDs (no complex session windows)
+// Simple hash generation for bot IDs
 function generateSimpleBotVisitorId(ip: string, userAgent: string): string {
   const normalizedUA = userAgent.toLowerCase().replace(/\s+/g, "");
   const combined = `bot:${ip}:${normalizedUA}`;
@@ -40,8 +38,14 @@ export function trackBotVisit(request: NextRequest, pathname: string): void {
         return;
       }
 
-      const serverUrl = ANALYTICS_CONFIG.SERVER_URL;
+      const edgeEndpoint = ANALYTICS_CONFIG.SERVER_URL;
       const siteId = ANALYTICS_CONFIG.SITE_ID;
+
+      // Skip if no edge endpoint configured
+      if (!edgeEndpoint) {
+        console.warn("[Jillen.Analytics] No NEXT_PUBLIC_ANALYTICS_SERVER_URL configured");
+        return;
+      }
 
       // Extract essential bot data
       const userAgent = request.headers.get('user-agent') || '';
@@ -61,6 +65,7 @@ export function trackBotVisit(request: NextRequest, pathname: string): void {
         visitorId,
         sessionId,
         eventType: "pageview" as const,
+        isBot: true, // ← NEW: Identify as bot event
         
         // Essential bot data
         userAgent,
@@ -91,13 +96,10 @@ export function trackBotVisit(request: NextRequest, pathname: string): void {
         language: null,
         doNotTrack: false,
         isMobile: /Mobi|Android/i.test(userAgent),
-        cacheStatus: "UNKNOWN" as const,
       };
 
-      // Send to analytics server (fire-and-forget)
-      const endpoint = `${serverUrl}/api/log/ingest`;
-      
-      await fetch(endpoint, {
+      // Send to Cloudflare worker endpoint (fire-and-forget)
+      await fetch(edgeEndpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -107,8 +109,7 @@ export function trackBotVisit(request: NextRequest, pathname: string): void {
       });
 
     } catch {
-      // Silent fail - do not log errors or throw exceptions
-      // Bot tracking should never break the application
+      // Silent fail - never break the application
       return;
     }
   })();

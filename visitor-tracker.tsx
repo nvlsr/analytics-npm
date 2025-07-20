@@ -1,7 +1,6 @@
 "use client";
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-import React, { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useCallback } from "react";
 import { usePathname } from "next/navigation";
 import { isbot } from "isbot";
 import {
@@ -26,7 +25,6 @@ export interface VisitorTrackerProps {
   userAgent: string;
   // Optional server-side header data
   edgeRegion?: string | null;
-  cacheStatus?: "HIT" | "MISS" | "BYPASS" | "STALE" | null;
 }
 
 export function VisitorTracker({
@@ -45,7 +43,6 @@ export function VisitorTracker({
   route,
   userAgent,
   edgeRegion,
-  cacheStatus,
 }: VisitorTrackerProps) {
   const pathname = usePathname();
   const isInitialized = useRef<boolean>(false);
@@ -240,8 +237,8 @@ export function VisitorTracker({
       referrer?: string,
       customPath?: string
     ) => {
-      // Only run in production (temporarily disabled for debugging)
-      if (process.env.NODE_ENV !== "production" && false) {
+      // Skip analytics in development
+      if (process.env.NODE_ENV !== "production") {
         return;
       }
 
@@ -250,10 +247,8 @@ export function VisitorTracker({
         return;
       }
 
-      const serverUrl = ANALYTICS_CONFIG.SERVER_URL;
+      const edgeEndpoint = ANALYTICS_CONFIG.SERVER_URL;
       const siteId = ANALYTICS_CONFIG.SITE_ID;
-
-      const endpoint = `${serverUrl}/api/log/ingest`;
 
       // Extract standard client-side data with SSR guards
       const language =
@@ -270,63 +265,66 @@ export function VisitorTracker({
       // Get enhanced client data
       const clientData = getClientData();
 
-      // Simulate development data when running locally
-      const isDev = process.env.NODE_ENV === "development";
-      const devCountry = isDev && !country ? "US" : country;
-      const devCity = isDev && !city ? "San Francisco" : city;
-      const devRegion = isDev && !region ? "CA" : region;
-      const devEdgeRegion = isDev && !edgeRegion ? "sfo1" : edgeRegion;
+      const devCountry = country;
+      const devCity = city;
+      const devRegion = region;
+      const devEdgeRegion = edgeRegion;
 
-      try {
-        const response = await fetch(endpoint, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          mode: "cors",
-          body: JSON.stringify({
-            siteId,
-            path: customPath || route,
-            visitorId: generateVisitorId(ip, userAgent),
-            sessionId: generateSessionId(),
-            eventType,
-            // Enhanced client-side fields
-            isNewVisitor: clientData.isNewVisitor,
-            screenResolution: clientData.screenResolution,
-            viewportSize: clientData.viewportSize,
-            connectionType: clientData.connectionType,
-            clientTimeZone: clientData.clientTimeZone,
-            sessionStartTime: clientData.sessionStartTime,
-            // Server-side fields
-            ipAddress: ip,
-            userAgent,
-            referrer,
-            country: devCountry || undefined,
-            city: devCity || undefined,
-            region: devRegion || undefined,
-            continent: continent || undefined,
-            latitude: latitude ? parseFloat(latitude) : undefined,
-            longitude: longitude ? parseFloat(longitude) : undefined,
-            timezone: timezone || undefined,
-            postalCode: postalCode || undefined,
-            host: host || undefined,
-            protocol: protocol || undefined,
-            deploymentUrl: deploymentUrl || undefined,
-            edgeRegion: devEdgeRegion || undefined,
-            language,
-            doNotTrack,
-            isMobile,
-            cacheStatus: cacheStatus || "UNKNOWN",
-          }),
-        });
+      // Prepare event payload
+      const eventPayload = {
+        siteId,
+        path: customPath || route,
+        visitorId: generateVisitorId(ip, userAgent),
+        sessionId: generateSessionId(),
+        eventType,
+        isBot: false,
+        // Enhanced client-side fields
+        isNewVisitor: clientData.isNewVisitor,
+        screenResolution: clientData.screenResolution,
+        viewportSize: clientData.viewportSize,
+        connectionType: clientData.connectionType,
+        clientTimeZone: clientData.clientTimeZone,
+        sessionStartTime: clientData.sessionStartTime,
+        // Server-side fields
+        ipAddress: ip,
+        userAgent,
+        referrer,
+        country: devCountry || undefined,
+        city: devCity || undefined,
+        region: devRegion || undefined,
+        continent: continent || undefined,
+        latitude: latitude ? parseFloat(latitude) : undefined,
+        longitude: longitude ? parseFloat(longitude) : undefined,
+        timezone: timezone || undefined,
+        postalCode: postalCode || undefined,
+        host: host || undefined,
+        protocol: protocol || undefined,
+        deploymentUrl: deploymentUrl || undefined,
+        edgeRegion: devEdgeRegion || undefined,
+        language,
+        doNotTrack,
+        isMobile,
+      };
 
-        if (!response.ok) {
-          const error = await response.json();
-          console.error("[Analytics] Failed to track event:", error);
+      // Send to Cloudflare worker endpoint
+      if (edgeEndpoint) {
+        try {
+          await fetch(edgeEndpoint, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            mode: "cors",
+            body: JSON.stringify(eventPayload),
+          });
+        } catch (error) {
+          // Silent error handling - don't block the page
+          console.error("[Jillen.Analytics] Edge endpoint failed:", error);
         }
-      } catch (error) {
-        // Silent error handling - don't block the page
-        console.error("[Analytics] Tracking failed:", error);
+      } else {
+        console.warn(
+          "[Jillen.Analytics] No NEXT_PUBLIC_ANALYTICS_SERVER_URL configured"
+        );
       }
     },
     [
@@ -345,7 +343,6 @@ export function VisitorTracker({
       route,
       userAgent,
       edgeRegion,
-      cacheStatus,
       getClientData,
     ]
   );
@@ -402,9 +399,6 @@ export function VisitorTracker({
       sendAnalyticsEvent("pageview", undefined, currentPath);
       lastTrackedPath.current = currentPath;
     }
-
-    // Return undefined for useEffect when no cleanup is needed
-    return;
   }, [
     pathname,
     route,
@@ -422,7 +416,6 @@ export function VisitorTracker({
     deploymentUrl,
     userAgent,
     edgeRegion,
-    cacheStatus,
     sendAnalyticsEvent,
     getClientData,
     checkIfBot,

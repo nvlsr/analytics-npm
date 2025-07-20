@@ -1,6 +1,6 @@
 {
   "name": "@jillen/analytics",
-  "version": "3.5.2",
+  "version": "3.5.3",
   "description": "Advanced analytics package for Next.js applications with bot detection and comprehensive tracking",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
