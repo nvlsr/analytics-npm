@@ -3,10 +3,7 @@
 import { useEffect, useRef, useCallback } from "react";
 import { usePathname } from "next/navigation";
 import { isbot } from "isbot";
-import {
-  ANALYTICS_CONFIG,
-  validateAnalyticsConfig,
-} from "./analytics-constants";
+import { getSiteIdWithFallback } from "./analytics-host-utils";
 
 export interface VisitorTrackerProps {
   ip: string;
@@ -252,13 +249,8 @@ export function VisitorTracker({
         return;
       }
 
-      // Validate configuration
-      if (!validateAnalyticsConfig()) {
-        return;
-      }
-
-      const edgeEndpoint = ANALYTICS_CONFIG.SERVER_URL;
-      const siteId = ANALYTICS_CONFIG.SITE_ID;
+      const siteId = getSiteIdWithFallback(host || null);
+      const edgeEndpoint = "https://analytics-ingestion.maaakri.workers.dev";
 
       // Extract standard client-side data with SSR guards
       const language =

@@ -1,12 +1,14 @@
 import type { NextRequest } from 'next/server';
-import { ANALYTICS_CONFIG, validateAnalyticsConfig } from './analytics-constants';
+import { getSiteIdWithFallback } from './analytics-host-utils';
 
 /**
+ * Simplified Bot Tracking Utility
+ * 
  * Fire-and-forget bot tracking with minimal data collection.
- * Designed for performance and reliability.
+ * Designed for performance and reliability - no complex calculations.
  */
 
-// Simple hash generation for bot IDs
+// Simple hash generation for bot IDs (no complex session windows)
 function generateSimpleBotVisitorId(ip: string, userAgent: string): string {
   const normalizedUA = userAgent.toLowerCase().replace(/\s+/g, "");
   const combined = `bot:${ip}:${normalizedUA}`;
@@ -33,13 +35,9 @@ export function trackBotVisit(request: NextRequest, pathname: string): void {
   // Fire-and-forget: run async without awaiting
   void (async () => {
     try {
-      // Validate configuration
-      if (!validateAnalyticsConfig()) {
-        return;
-      }
-
-      const edgeEndpoint = ANALYTICS_CONFIG.SERVER_URL;
-      const siteId = ANALYTICS_CONFIG.SITE_ID;
+      const hostFromHeader = request.headers.get('host') || 'unknown';
+      const siteId = getSiteIdWithFallback(hostFromHeader);
+      const edgeEndpoint = "https://analytics-ingestion.maaakri.workers.dev";
 
       // Extract essential bot data
       const userAgent = request.headers.get('user-agent') || '';
