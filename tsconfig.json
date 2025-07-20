@@ -31,8 +31,8 @@
   "include": [
     "./index.ts",
     "./visitor-tracker.tsx",
-    "./analytics-constants.ts",
     "./analytics-bot-utils.ts",
+    "./analytics-host-utils.ts",
     "./server/**/*.ts",
     "./client/**/*.ts"
   ],

@@ -10,4 +10,5 @@ export * as client from './client';
 export * as server from './server';
 
 export { trackBotVisit } from './analytics-bot-utils';
+export { extractHostnameFromEnv, getSiteIdWithFallback } from './analytics-host-utils';
 export { type ParsedAnalyticsHeaders } from './server/header-parser'; 
