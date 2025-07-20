@@ -7,6 +7,9 @@ export const ANALYTICS_CONFIG = {
   SITE_ID: process.env.NEXT_PUBLIC_ANALYTICS_SITE_ID || "",
 } as const;
 
+// Track if we've already logged missing environment variables
+let hasLoggedMissingEnvVars = false;
+
 /**
  * Validate that required environment variables are set
  */
@@ -14,10 +17,14 @@ export function validateAnalyticsConfig() {
   const { SERVER_URL, SITE_ID } = ANALYTICS_CONFIG;
   
   if (!SERVER_URL || !SITE_ID) {
-    console.warn("[Analytics] Missing environment variables:", {
-      SERVER_URL: SERVER_URL ? "✓" : "✗ NEXT_PUBLIC_ANALYTICS_SERVER_URL",
-      SITE_ID: SITE_ID ? "✓" : "✗ NEXT_PUBLIC_ANALYTICS_SITE_ID"
-    });
+    // Only log once to avoid spam
+    if (!hasLoggedMissingEnvVars) {
+      console.error("[Jillen.Analytics] Missing required environment variables:", {
+        SERVER_URL: SERVER_URL ? "✓" : "✗ NEXT_PUBLIC_ANALYTICS_SERVER_URL",
+        SITE_ID: SITE_ID ? "✓" : "✗ NEXT_PUBLIC_ANALYTICS_SITE_ID"
+      });
+      hasLoggedMissingEnvVars = true;
+    }
     return false;
   }
   

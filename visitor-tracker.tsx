@@ -91,9 +91,19 @@ export function VisitorTracker({
   const generateVisitorId = (ip: string, userAgent: string): string => {
     const normalizedUA = userAgent.toLowerCase().replace(/\s+/g, "");
     const combined = `${ip}:${normalizedUA}`;
-    return btoa(combined)
-      .replace(/[^a-zA-Z0-9]/g, "")
-      .substring(0, 16);
+
+    // Use Buffer for Node.js compatibility, fallback to btoa for browser
+    try {
+      return Buffer.from(combined)
+        .toString("base64")
+        .replace(/[^a-zA-Z0-9]/g, "")
+        .substring(0, 16);
+    } catch {
+      // Fallback for browser environment
+      return btoa(combined)
+        .replace(/[^a-zA-Z0-9]/g, "")
+        .substring(0, 16);
+    }
   };
 
   const generateSessionId = (): string => {
@@ -306,10 +316,10 @@ export function VisitorTracker({
         isMobile,
       };
 
-      // Send to Cloudflare worker endpoint
-      if (edgeEndpoint) {
+      // Send to Cloudflare worker endpoint (fire-and-forget)
+      void (async () => {
         try {
-          await fetch(edgeEndpoint, {
+          const response = await fetch(edgeEndpoint, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
@@ -317,15 +327,35 @@ export function VisitorTracker({
             mode: "cors",
             body: JSON.stringify(eventPayload),
           });
+
+          // Check for server endpoint issues
+          if (!response.ok) {
+            console.error(
+              `[Jillen.Analytics] Server endpoint error: ${response.status} ${response.statusText} - visitor tracking failed`
+            );
+            return;
+          }
         } catch (error) {
+          // Log specific error types for debugging
+          if (error instanceof TypeError) {
+            console.error(
+              "[Jillen.Analytics] Configuration error in visitor tracking:",
+              error.message
+            );
+          } else if (error instanceof Error) {
+            console.error(
+              "[Jillen.Analytics] Network error in visitor tracking:",
+              error.message
+            );
+          } else {
+            console.error(
+              "[Jillen.Analytics] Unknown error in visitor tracking:",
+              error
+            );
+          }
           // Silent error handling - don't block the page
-          console.error("[Jillen.Analytics] Edge endpoint failed:", error);
         }
-      } else {
-        console.warn(
-          "[Jillen.Analytics] No NEXT_PUBLIC_ANALYTICS_SERVER_URL configured"
-        );
-      }
+      })();
     },
     [
       ip,
@@ -353,10 +383,7 @@ export function VisitorTracker({
     if (typeof window === "undefined") return;
 
     // Only track in production environment
-    const isProduction =
-      process.env.NEXT_PUBLIC_VERCEL_ENV === "production" ||
-      (process.env.NODE_ENV === "production" &&
-        !process.env.NEXT_PUBLIC_VERCEL_ENV);
+    const isProduction = process.env.NODE_ENV === "production";
 
     if (!isProduction) {
       return;

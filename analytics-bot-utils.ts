@@ -41,12 +41,6 @@ export function trackBotVisit(request: NextRequest, pathname: string): void {
       const edgeEndpoint = ANALYTICS_CONFIG.SERVER_URL;
       const siteId = ANALYTICS_CONFIG.SITE_ID;
 
-      // Skip if no edge endpoint configured
-      if (!edgeEndpoint) {
-        console.warn("[Jillen.Analytics] No NEXT_PUBLIC_ANALYTICS_SERVER_URL configured");
-        return;
-      }
-
       // Extract essential bot data
       const userAgent = request.headers.get('user-agent') || '';
       const ip = request.headers.get('x-forwarded-for')?.split(',')[0] || 
@@ -85,8 +79,8 @@ export function trackBotVisit(request: NextRequest, pathname: string): void {
         city: null,
         region: null,
         continent: null,
-        latitude: null,
-        longitude: null,
+        latitude: 0,
+        longitude: 0,
         timezone: null,
         postalCode: null,
         host: request.headers.get('host') || null,
@@ -99,7 +93,7 @@ export function trackBotVisit(request: NextRequest, pathname: string): void {
       };
 
       // Send to Cloudflare worker endpoint (fire-and-forget)
-      await fetch(edgeEndpoint, {
+      const response = await fetch(edgeEndpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -108,7 +102,21 @@ export function trackBotVisit(request: NextRequest, pathname: string): void {
         body: JSON.stringify(botPayload),
       });
 
-    } catch {
+      // Check for server endpoint issues
+      if (!response.ok) {
+        console.error(`[Jillen.Analytics] Server endpoint error: ${response.status} ${response.statusText} - bot tracking failed`);
+        return;
+      }
+
+    } catch (error) {
+      // Log specific error types for debugging
+      if (error instanceof TypeError) {
+        console.error("[Jillen.Analytics] Configuration error in bot tracking:", error.message);
+      } else if (error instanceof Error) {
+        console.error("[Jillen.Analytics] Network error in bot tracking:", error.message);
+      } else {
+        console.error("[Jillen.Analytics] Unknown error in bot tracking:", error);
+      }
       // Silent fail - never break the application
       return;
     }
