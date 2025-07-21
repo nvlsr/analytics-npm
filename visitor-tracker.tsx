@@ -5,6 +5,17 @@ import { usePathname } from "next/navigation";
 import { isbot } from "isbot";
 import { getSiteIdWithFallback } from "./analytics-host-utils";
 
+function generateVisitorId(ip: string): string {
+  try {
+    return Buffer.from(ip)
+      .toString("base64")
+      .replace(/[^a-zA-Z0-9]/g, "");
+  } catch {
+    // Fallback for browser environment
+    return btoa(ip).replace(/[^a-zA-Z0-9]/g, "");
+  }
+}
+
 export interface VisitorTrackerProps {
   ip: string;
   country: string | null;
@@ -84,25 +95,6 @@ export function VisitorTracker({
     return false;
   }, [userAgent]);
 
-  // Generate consistent visitor and session IDs
-  const generateVisitorId = (ip: string, userAgent: string): string => {
-    const normalizedUA = userAgent.toLowerCase().replace(/\s+/g, "");
-    const combined = `${ip}:${normalizedUA}`;
-
-    // Use Buffer for Node.js compatibility, fallback to btoa for browser
-    try {
-      return Buffer.from(combined)
-        .toString("base64")
-        .replace(/[^a-zA-Z0-9]/g, "")
-        .substring(0, 16);
-    } catch {
-      // Fallback for browser environment
-      return btoa(combined)
-        .replace(/[^a-zA-Z0-9]/g, "")
-        .substring(0, 16);
-    }
-  };
-
   const generateSessionId = (): string => {
     // Check for existing session ID in sessionStorage
     if (typeof window !== "undefined") {
@@ -164,7 +156,7 @@ export function VisitorTracker({
     }
 
     // Check if this is a new visitor using session-level caching
-    const visitorId = generateVisitorId(ip, userAgent);
+    const visitorId = generateVisitorId(ip);
     const sessionId = generateSessionId();
     const sessionCacheKey = `isNewVisitor_${sessionId}`;
 
@@ -235,7 +227,7 @@ export function VisitorTracker({
       clientTimeZone,
       sessionStartTime,
     };
-  }, [ip, userAgent]);
+  }, [ip]);
 
   // Send event to analytics system
   const sendAnalyticsEvent = useCallback(
@@ -276,7 +268,7 @@ export function VisitorTracker({
       const eventPayload = {
         siteId,
         path: customPath || route,
-        visitorId: generateVisitorId(ip, userAgent),
+        visitorId: generateVisitorId(ip),
         sessionId: generateSessionId(),
         eventType,
         isBot: false,

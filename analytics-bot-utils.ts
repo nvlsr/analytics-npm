@@ -9,13 +9,11 @@ import { getSiteIdWithFallback } from './analytics-host-utils';
  */
 
 // Simple hash generation for bot IDs (no complex session windows)
-function generateSimpleBotVisitorId(ip: string, userAgent: string): string {
-  const normalizedUA = userAgent.toLowerCase().replace(/\s+/g, "");
-  const combined = `bot:${ip}:${normalizedUA}`;
-  return Buffer.from(combined)
+function generateSimpleBotVisitorId(ip: string): string {
+  const baseId = Buffer.from(ip)
     .toString("base64")
-    .replace(/[^a-zA-Z0-9]/g, "")
-    .substring(0, 16);
+    .replace(/[^a-zA-Z0-9]/g, "");
+  return `bot_${baseId}`;
 }
 
 function generateSimpleBotSessionId(ip: string): string {
@@ -46,7 +44,7 @@ export function trackBotVisit(request: NextRequest, pathname: string): void {
                 'unknown';
 
       // Generate minimal required IDs
-      const visitorId = generateSimpleBotVisitorId(ip, userAgent);
+      const visitorId = generateSimpleBotVisitorId(ip);
       const sessionId = generateSimpleBotSessionId(ip);
 
       // Prepare minimal bot payload
