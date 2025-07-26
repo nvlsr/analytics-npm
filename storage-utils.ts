@@ -8,7 +8,7 @@ const ANALYTICS_STORAGE_PREFIX = "analytics_";
 const DEFAULT_TTL = {
   VISITOR: 30 * 24 * 60 * 60 * 1000, // 30 days
   SESSION: 24 * 60 * 60 * 1000, // 24 hours
-  SESSION_ACTIVE: 30 * 60 * 1000, // 30 minutes (typical session timeout)
+  SESSION_ACTIVE: 2 * 60 * 60 * 1000, // 2 hours (extended session timeout)
 } as const;
 
 export class AnalyticsStorage {
