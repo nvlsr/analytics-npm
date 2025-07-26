@@ -4,6 +4,7 @@ import { useEffect, useRef, useCallback } from "react";
 import { usePathname } from "next/navigation";
 import { isbot } from "isbot";
 import { getSiteIdWithFallback } from "./analytics-host-utils";
+import { AnalyticsStorage, AnalyticsSessionStorage } from "./storage-utils";
 
 function generateVisitorId(ip: string): string {
   try {
@@ -98,7 +99,8 @@ export function VisitorTracker({
   const generateSessionId = (): string => {
     // Check for existing session ID in sessionStorage
     if (typeof window !== "undefined") {
-      const existingSessionId = sessionStorage.getItem("analytics_session_id");
+      const existingSessionId =
+        AnalyticsSessionStorage.getItem<string>("session_id");
       if (existingSessionId) {
         return existingSessionId;
       }
@@ -131,11 +133,7 @@ export function VisitorTracker({
 
     // Store in sessionStorage (persists across page loads, expires with browser session)
     if (typeof window !== "undefined") {
-      try {
-        sessionStorage.setItem("analytics_session_id", newSessionId);
-      } catch {
-        // Continue without storage if sessionStorage is disabled
-      }
+      AnalyticsSessionStorage.setItem("session_id", newSessionId);
     }
 
     return newSessionId;
@@ -161,42 +159,33 @@ export function VisitorTracker({
     const sessionCacheKey = `isNewVisitor_${sessionId}`;
 
     // Check if we already determined isNewVisitor for this session
-    const cachedIsNewVisitor = sessionStorage.getItem(sessionCacheKey);
+    const cachedIsNewVisitor =
+      AnalyticsSessionStorage.getItem<boolean>(sessionCacheKey);
     let isNewVisitor: boolean;
 
     if (cachedIsNewVisitor === null) {
       // First event in this session - make the determination
-      const visitorExists = localStorage.getItem(
-        `analytics_visitor_${visitorId}`
-      );
+      const visitorExists = AnalyticsStorage.hasVisitor(visitorId);
       isNewVisitor = !visitorExists;
 
       // Cache the decision for this entire session
-      sessionStorage.setItem(sessionCacheKey, isNewVisitor.toString());
+      AnalyticsSessionStorage.setItem(sessionCacheKey, isNewVisitor);
 
       // Mark visitor as seen for future sessions (only if they're new)
       if (isNewVisitor) {
-        localStorage.setItem(
-          `analytics_visitor_${visitorId}`,
-          Date.now().toString()
-        );
+        AnalyticsStorage.setVisitor(visitorId);
       }
     } else {
       // Use the cached decision from earlier in this session
-      isNewVisitor = cachedIsNewVisitor === "true";
+      isNewVisitor = cachedIsNewVisitor;
     }
 
     // Get session start time (persistent for this session)
     // Note: reusing sessionId from above
-    let sessionStartTime = localStorage.getItem(
-      `analytics_session_start_${sessionId}`
-    );
+    let sessionStartTime = AnalyticsStorage.getSessionStart(sessionId);
     if (!sessionStartTime) {
       sessionStartTime = new Date().toISOString();
-      localStorage.setItem(
-        `analytics_session_start_${sessionId}`,
-        sessionStartTime
-      );
+      AnalyticsStorage.setSessionStart(sessionId, sessionStartTime);
     }
 
     // Get screen and viewport data (safe now that we're client-side)
@@ -385,13 +374,12 @@ export function VisitorTracker({
       isInitialized.current = true;
 
       const sessionId = generateSessionId();
-      const sessionKey = `analytics_session_active_${sessionId}`;
-      const isSessionActive = localStorage.getItem(sessionKey);
+      const isSessionActive = AnalyticsStorage.isSessionActive(sessionId);
 
       // Send session_start if this is a new session
       if (!isSessionActive) {
         sendAnalyticsEvent("session_start", undefined, currentPath);
-        localStorage.setItem(sessionKey, "true");
+        AnalyticsStorage.setSessionActive(sessionId);
       }
 
       // Track initial pageview

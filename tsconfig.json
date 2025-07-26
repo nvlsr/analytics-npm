@@ -33,6 +33,7 @@
     "./visitor-tracker.tsx",
     "./analytics-bot-utils.ts",
     "./analytics-host-utils.ts",
+    "./storage-utils.ts",
     "./server/**/*.ts",
     "./client/**/*.ts"
   ],
