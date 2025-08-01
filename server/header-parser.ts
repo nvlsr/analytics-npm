@@ -18,6 +18,7 @@ export interface ParsedAnalyticsHeaders {
   userAgent: string;
   edgeRegion: string | null;
   cacheStatus: "HIT" | "MISS" | "BYPASS" | "STALE" | null;
+  username: string | null;
 }
 
 export function parseAnalyticsHeaders(headers: Headers): ParsedAnalyticsHeaders {
@@ -56,5 +57,6 @@ export function parseAnalyticsHeaders(headers: Headers): ParsedAnalyticsHeaders 
     userAgent,
     edgeRegion,
     cacheStatus,
+    username: null, 
   };
 } 

@@ -34,6 +34,7 @@ export interface VisitorTrackerProps {
   userAgent: string;
   // Optional server-side header data
   edgeRegion?: string | null;
+  username?: string | null;
 }
 
 export function VisitorTracker({
@@ -52,6 +53,7 @@ export function VisitorTracker({
   route,
   userAgent,
   edgeRegion,
+  username,
 }: VisitorTrackerProps) {
   const pathname = usePathname();
   const isInitialized = useRef<boolean>(false);
@@ -287,6 +289,7 @@ export function VisitorTracker({
         language,
         doNotTrack,
         isMobile,
+        username: username || undefined,
       };
 
       // Send to Cloudflare worker endpoint (fire-and-forget)
@@ -346,6 +349,7 @@ export function VisitorTracker({
       route,
       userAgent,
       edgeRegion,
+      username,
       getClientData,
     ]
   );
@@ -415,6 +419,7 @@ export function VisitorTracker({
     deploymentUrl,
     userAgent,
     edgeRegion,
+    username,
     sendAnalyticsEvent,
     getClientData,
     checkIfBot,
