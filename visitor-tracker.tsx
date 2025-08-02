@@ -295,6 +295,9 @@ export function VisitorTracker({
       // Send to Cloudflare worker endpoint (fire-and-forget)
       void (async () => {
         try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+          
           const response = await fetch(edgeEndpoint, {
             method: "POST",
             headers: {
@@ -302,7 +305,10 @@ export function VisitorTracker({
             },
             mode: "cors",
             body: JSON.stringify(eventPayload),
+            signal: controller.signal,
           });
+          
+          clearTimeout(timeoutId);
 
           // Check for server endpoint issues
           if (!response.ok) {
@@ -314,13 +320,23 @@ export function VisitorTracker({
         } catch (error) {
           // Log specific error types for debugging
           if (error instanceof TypeError) {
-            console.error(
-              "[Jillen.Analytics] Configuration error in visitor tracking:",
-              error.message
-            );
+            if (error.message.includes('fetch failed') || error.message.includes('network')) {
+              console.error(
+                "[Jillen.Analytics] Network connectivity error in visitor tracking:",
+                error.message
+              );
+            } else {
+              console.error(
+                "[Jillen.Analytics] Request configuration error in visitor tracking:",
+                error.message
+              );
+            }
+          } else if (error instanceof DOMException && error.name === 'AbortError') {
+            console.error("[Jillen.Analytics] Visitor tracking request timeout after 10 seconds");
           } else if (error instanceof Error) {
             console.error(
-              "[Jillen.Analytics] Network error in visitor tracking:",
+              "[Jillen.Analytics] Visitor tracking error:",
+              error.name,
               error.message
             );
           } else {
