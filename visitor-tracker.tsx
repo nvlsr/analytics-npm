@@ -59,6 +59,13 @@ export function VisitorTracker({
   const isInitialized = useRef<boolean>(false);
   const lastTrackedPath = useRef<string>(route);
 
+  // Heartbeat state management
+  const heartbeatIntervalRef = useRef<NodeJS.Timeout | undefined>(undefined);
+  const currentIntervalRef = useRef<number>(15000); // Start at 15s
+  const lastActivityRef = useRef<number>(Date.now());
+  const isActiveRef = useRef<boolean>(true);
+  const heartbeatEnabledRef = useRef<boolean>(true);
+
   // Check if this is a bot environment
   const checkIfBot = useCallback(() => {
     // Check server-provided user agent first
@@ -223,7 +230,7 @@ export function VisitorTracker({
   // Send event to analytics system
   const sendAnalyticsEvent = useCallback(
     async (
-      eventType: "pageview" | "session_start",
+      eventType: "pageview" | "session_start" | "heartbeat",
       referrer?: string,
       customPath?: string
     ) => {
@@ -297,7 +304,7 @@ export function VisitorTracker({
         try {
           const controller = new AbortController();
           const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
-          
+
           const response = await fetch(edgeEndpoint, {
             method: "POST",
             headers: {
@@ -307,7 +314,7 @@ export function VisitorTracker({
             body: JSON.stringify(eventPayload),
             signal: controller.signal,
           });
-          
+
           clearTimeout(timeoutId);
 
           // Check for server endpoint issues
@@ -320,7 +327,10 @@ export function VisitorTracker({
         } catch (error) {
           // Log specific error types for debugging
           if (error instanceof TypeError) {
-            if (error.message.includes('fetch failed') || error.message.includes('network')) {
+            if (
+              error.message.includes("fetch failed") ||
+              error.message.includes("network")
+            ) {
               console.error(
                 "[Jillen.Analytics] Network connectivity error in visitor tracking:",
                 error.message
@@ -331,8 +341,13 @@ export function VisitorTracker({
                 error.message
               );
             }
-          } else if (error instanceof DOMException && error.name === 'AbortError') {
-            console.error("[Jillen.Analytics] Visitor tracking request timeout after 10 seconds");
+          } else if (
+            error instanceof DOMException &&
+            error.name === "AbortError"
+          ) {
+            console.error(
+              "[Jillen.Analytics] Visitor tracking request timeout after 10 seconds"
+            );
           } else if (error instanceof Error) {
             console.error(
               "[Jillen.Analytics] Visitor tracking error:",
@@ -369,6 +384,102 @@ export function VisitorTracker({
       getClientData,
     ]
   );
+
+  // Heartbeat management functions
+  const scheduleNextHeartbeat = useCallback(() => {
+    if (!heartbeatEnabledRef.current || typeof window === "undefined") return;
+
+    // Clear existing timeout
+    if (heartbeatIntervalRef.current) {
+      clearTimeout(heartbeatIntervalRef.current);
+    }
+
+    heartbeatIntervalRef.current = setTimeout(() => {
+      // Check if user has been inactive for more than current interval
+      const timeSinceActivity = Date.now() - lastActivityRef.current;
+      const inactivityThreshold = 2 * 60 * 1000; // 2 minutes
+
+      if (timeSinceActivity > inactivityThreshold) {
+        // User is inactive, pause heartbeats
+        isActiveRef.current = false;
+        return;
+      }
+
+      // Send heartbeat
+      if (isActiveRef.current && !document.hidden) {
+        sendAnalyticsEvent("heartbeat", undefined, pathname || route);
+      }
+
+      // Progressive backoff: increase interval if no recent activity
+      const intervals = [15000, 30000, 60000, 120000, 300000]; // 15s, 30s, 1m, 2m, 5m
+      const currentIndex = intervals.indexOf(currentIntervalRef.current);
+
+      if (
+        timeSinceActivity > currentIntervalRef.current &&
+        currentIndex < intervals.length - 1
+      ) {
+        currentIntervalRef.current = intervals[currentIndex + 1];
+      }
+
+      // Schedule next heartbeat
+      scheduleNextHeartbeat();
+    }, currentIntervalRef.current);
+  }, [pathname, route, sendAnalyticsEvent]);
+
+  const handleActivity = useCallback(() => {
+    const now = Date.now();
+    lastActivityRef.current = now;
+    isActiveRef.current = true;
+
+    // Reset to fastest interval on activity
+    currentIntervalRef.current = 15000;
+
+    // Restart heartbeat cycle if user became active
+    if (heartbeatEnabledRef.current) {
+      scheduleNextHeartbeat();
+    }
+  }, [scheduleNextHeartbeat]);
+
+  const throttleRef = useRef<{
+    timeoutId?: NodeJS.Timeout;
+    lastExecTime: number;
+  }>({ lastExecTime: 0 });
+
+  const throttledHandleActivity = useCallback(() => {
+    const delay = 250;
+    const currentTime = Date.now();
+
+    if (currentTime - throttleRef.current.lastExecTime > delay) {
+      handleActivity();
+      throttleRef.current.lastExecTime = currentTime;
+    } else {
+      if (throttleRef.current.timeoutId) {
+        clearTimeout(throttleRef.current.timeoutId);
+      }
+      throttleRef.current.timeoutId = setTimeout(() => {
+        handleActivity();
+        throttleRef.current.lastExecTime = Date.now();
+      }, delay - (currentTime - throttleRef.current.lastExecTime));
+    }
+  }, [handleActivity]);
+
+  const handleVisibilityChange = useCallback(() => {
+    if (typeof document === "undefined") return;
+
+    if (document.hidden) {
+      // Pause heartbeats when tab is hidden
+      heartbeatEnabledRef.current = false;
+      if (heartbeatIntervalRef.current) {
+        clearTimeout(heartbeatIntervalRef.current);
+      }
+    } else {
+      // Resume heartbeats when tab becomes visible
+      heartbeatEnabledRef.current = true;
+      isActiveRef.current = true;
+      lastActivityRef.current = Date.now();
+      scheduleNextHeartbeat();
+    }
+  }, [scheduleNextHeartbeat]);
 
   // Track session start, pageview and setup session end
   useEffect(() => {
@@ -410,7 +521,49 @@ export function VisitorTracker({
       sendAnalyticsEvent("pageview", referrer, currentPath);
       lastTrackedPath.current = currentPath;
 
-      // No cleanup needed - sessions end naturally through timeout logic
+      // Set up heartbeat system and activity tracking
+      if (typeof window !== "undefined") {
+        // Add activity event listeners
+        const events = [
+          "mousemove",
+          "mousedown",
+          "click",
+          "keydown",
+          "keyup",
+          "scroll",
+          "touchstart",
+          "touchmove",
+        ];
+        events.forEach((event) => {
+          window.addEventListener(event, throttledHandleActivity, {
+            passive: true,
+          });
+        });
+
+        // Add visibility change listener
+        document.addEventListener("visibilitychange", handleVisibilityChange);
+
+        // Start heartbeat system
+        lastActivityRef.current = Date.now();
+        scheduleNextHeartbeat();
+
+        // Cleanup function
+        return () => {
+          // Remove event listeners
+          events.forEach((event) => {
+            window.removeEventListener(event, throttledHandleActivity);
+          });
+          document.removeEventListener(
+            "visibilitychange",
+            handleVisibilityChange
+          );
+
+          // Clear heartbeat timer
+          if (heartbeatIntervalRef.current) {
+            clearTimeout(heartbeatIntervalRef.current);
+          }
+        };
+      }
     }
     // Handle route changes (client-side navigation)
     else if (currentPath !== lastTrackedPath.current) {
@@ -418,6 +571,9 @@ export function VisitorTracker({
       sendAnalyticsEvent("pageview", undefined, currentPath);
       lastTrackedPath.current = currentPath;
     }
+    
+    // Explicit return for when no action is needed
+    return;
   }, [
     pathname,
     route,
@@ -439,6 +595,9 @@ export function VisitorTracker({
     sendAnalyticsEvent,
     getClientData,
     checkIfBot,
+    scheduleNextHeartbeat,
+    throttledHandleActivity,
+    handleVisibilityChange,
   ]); // Re-run if pathname or route changes
 
   return null; // This component renders nothing
