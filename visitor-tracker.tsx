@@ -105,13 +105,27 @@ export function VisitorTracker({
     return false;
   }, [userAgent]);
 
-  const generateSessionId = (): string => {
-    // Check for existing session ID in sessionStorage
+  const generateSessionId = useCallback((): string => {
+    // Check for existing session ID with 30-minute timeout
     if (typeof window !== "undefined") {
       const existingSessionId =
         AnalyticsSessionStorage.getItem<string>("session_id");
-      if (existingSessionId) {
-        return existingSessionId;
+      const sessionTimestamp =
+        AnalyticsSessionStorage.getItem<number>("session_timestamp");
+
+      if (existingSessionId && sessionTimestamp) {
+        const sessionAge = Date.now() - sessionTimestamp;
+        const SESSION_TIMEOUT = 30 * 60 * 1000; // 30 minutes
+
+        if (sessionAge < SESSION_TIMEOUT) {
+          // Session is still valid, update timestamp and return existing ID
+          AnalyticsSessionStorage.setItem("session_timestamp", Date.now());
+          return existingSessionId;
+        }
+
+        // Session expired, clear it
+        AnalyticsSessionStorage.removeItem("session_id");
+        AnalyticsSessionStorage.removeItem("session_timestamp");
       }
     }
 
@@ -140,13 +154,14 @@ export function VisitorTracker({
 
     const newSessionId = generateLightweightId();
 
-    // Store in sessionStorage (persists across page loads, expires with browser session)
+    // Store in sessionStorage with timestamp (persists across page loads, expires with browser session)
     if (typeof window !== "undefined") {
       AnalyticsSessionStorage.setItem("session_id", newSessionId);
+      AnalyticsSessionStorage.setItem("session_timestamp", Date.now());
     }
 
     return newSessionId;
-  };
+  }, []);
 
   // Get enhanced client-side data
   const getClientData = useCallback(() => {
@@ -225,7 +240,7 @@ export function VisitorTracker({
       clientTimeZone,
       sessionStartTime,
     };
-  }, [ip]);
+  }, [ip, generateSessionId]);
 
   // Send event to analytics system
   const sendAnalyticsEvent = useCallback(
@@ -382,6 +397,7 @@ export function VisitorTracker({
       edgeRegion,
       username,
       getClientData,
+      generateSessionId,
     ]
   );
 
@@ -410,15 +426,35 @@ export function VisitorTracker({
         sendAnalyticsEvent("heartbeat", undefined, pathname || route);
       }
 
-      // Progressive backoff: increase interval if no recent activity
-      const intervals = [15000, 30000, 60000, 120000, 300000]; // 15s, 30s, 1m, 2m, 5m
+      // Progressive backoff: increase interval if no recent activity, extended to 30 minutes
+      const intervals = [
+        15000, 30000, 60000, 120000, 300000, 600000, 900000, 1800000,
+      ]; // 15s, 30s, 1m, 2m, 5m, 10m, 15m, 30m
       const currentIndex = intervals.indexOf(currentIntervalRef.current);
 
-      if (
+      // Check session age to implement graceful termination
+      const sessionTimestamp =
+        typeof window !== "undefined"
+          ? AnalyticsSessionStorage.getItem<number>("session_timestamp")
+          : null;
+      const sessionAge = sessionTimestamp ? Date.now() - sessionTimestamp : 0;
+      const SESSION_TIMEOUT = 30 * 60 * 1000; // 30 minutes
+
+      // If session is near expiry (28+ minutes), slow down heartbeats significantly
+      if (sessionAge > SESSION_TIMEOUT - 2 * 60 * 1000) {
+        // Last 2 minutes of session
+        currentIntervalRef.current = 1800000; // 30 minutes
+      } else if (
         timeSinceActivity > currentIntervalRef.current &&
         currentIndex < intervals.length - 1
       ) {
         currentIntervalRef.current = intervals[currentIndex + 1];
+      }
+
+      // Gracefully terminate heartbeats after 30 minutes
+      if (sessionAge >= SESSION_TIMEOUT) {
+        heartbeatEnabledRef.current = false;
+        return;
       }
 
       // Schedule next heartbeat
@@ -431,6 +467,23 @@ export function VisitorTracker({
     lastActivityRef.current = now;
     isActiveRef.current = true;
 
+    // Check if session has expired and restart if needed
+    const sessionTimestamp =
+      typeof window !== "undefined"
+        ? AnalyticsSessionStorage.getItem<number>("session_timestamp")
+        : null;
+    const sessionAge = sessionTimestamp ? now - sessionTimestamp : 0;
+    const SESSION_TIMEOUT = 30 * 60 * 1000; // 30 minutes
+
+    if (sessionAge > SESSION_TIMEOUT) {
+      // Session expired, generate new session and send session_start
+      generateSessionId();
+      sendAnalyticsEvent("session_start", undefined, pathname || route);
+
+      // Re-enable heartbeats for new session
+      heartbeatEnabledRef.current = true;
+    }
+
     // Reset to fastest interval on activity
     currentIntervalRef.current = 15000;
 
@@ -438,7 +491,13 @@ export function VisitorTracker({
     if (heartbeatEnabledRef.current) {
       scheduleNextHeartbeat();
     }
-  }, [scheduleNextHeartbeat]);
+  }, [
+    scheduleNextHeartbeat,
+    generateSessionId,
+    sendAnalyticsEvent,
+    pathname,
+    route,
+  ]);
 
   const throttleRef = useRef<{
     timeoutId?: NodeJS.Timeout;
@@ -571,7 +630,7 @@ export function VisitorTracker({
       sendAnalyticsEvent("pageview", undefined, currentPath);
       lastTrackedPath.current = currentPath;
     }
-    
+
     // Explicit return for when no action is needed
     return;
   }, [
@@ -595,6 +654,7 @@ export function VisitorTracker({
     sendAnalyticsEvent,
     getClientData,
     checkIfBot,
+    generateSessionId,
     scheduleNextHeartbeat,
     throttledHandleActivity,
     handleVisibilityChange,
