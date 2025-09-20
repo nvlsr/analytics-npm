@@ -89,9 +89,6 @@ export function trackBotVisit(request: NextRequest, pathname: string): void {
       };
 
       // Send to Cloudflare worker endpoint (fire-and-forget)
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
-      
       const response = await fetch(edgeEndpoint, {
         method: "POST",
         headers: {
@@ -99,10 +96,7 @@ export function trackBotVisit(request: NextRequest, pathname: string): void {
         },
         mode: 'cors',
         body: JSON.stringify(botPayload),
-        signal: controller.signal,
       });
-      
-      clearTimeout(timeoutId);
 
       // Check for server endpoint issues
       if (!response.ok) {
@@ -113,15 +107,9 @@ export function trackBotVisit(request: NextRequest, pathname: string): void {
     } catch (error) {
       // Log specific error types for debugging
       if (error instanceof TypeError) {
-        if (error.message.includes('fetch failed') || error.message.includes('network')) {
-          console.error("[Jillen.Analytics] Network connectivity error in bot tracking:", error.message);
-        } else {
-          console.error("[Jillen.Analytics] Request configuration error in bot tracking:", error.message);
-        }
-      } else if (error instanceof DOMException && error.name === 'AbortError') {
-        console.error("[Jillen.Analytics] Bot tracking request timeout after 10 seconds");
+        console.error("[Jillen.Analytics] Configuration error in bot tracking:", error.message);
       } else if (error instanceof Error) {
-        console.error("[Jillen.Analytics] Bot tracking error:", error.name, error.message);
+        console.error("[Jillen.Analytics] Network error in bot tracking:", error.message);
       } else {
         console.error("[Jillen.Analytics] Unknown error in bot tracking:", error);
       }

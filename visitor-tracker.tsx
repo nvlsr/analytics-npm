@@ -6,6 +6,11 @@ import { isbot } from "isbot";
 import { getSiteIdWithFallback } from "./analytics-host-utils";
 import { AnalyticsStorage, AnalyticsSessionStorage } from "./storage-utils";
 
+interface SessionData {
+  session_id: string;
+  last_activity: number; // Last user activity (updated on user actions only)
+}
+
 function generateVisitorId(ip: string): string {
   try {
     return Buffer.from(ip)
@@ -62,7 +67,6 @@ export function VisitorTracker({
   // Heartbeat state management
   const heartbeatIntervalRef = useRef<NodeJS.Timeout | undefined>(undefined);
   const currentIntervalRef = useRef<number>(15000); // Start at 15s
-  const lastActivityRef = useRef<number>(Date.now());
   const isActiveRef = useRef<boolean>(true);
   const heartbeatEnabledRef = useRef<boolean>(true);
 
@@ -105,31 +109,31 @@ export function VisitorTracker({
     return false;
   }, [userAgent]);
 
-  const generateSessionId = useCallback((): string => {
-    // Check for existing session ID with 30-minute timeout
+  const generateSessionId = useCallback((): {
+    sessionId: string;
+    isNewSession: boolean;
+  } => {
+    // Check for existing session ID with 30-minute timeout based on last activity
     if (typeof window !== "undefined") {
-      const existingSessionId =
-        AnalyticsSessionStorage.getItem<string>("session_id");
-      const sessionTimestamp =
-        AnalyticsSessionStorage.getItem<number>("session_timestamp");
+      const sessionData =
+        AnalyticsSessionStorage.getItem<SessionData>("session_data");
 
-      if (existingSessionId && sessionTimestamp) {
-        const sessionAge = Date.now() - sessionTimestamp;
+      if (sessionData?.session_id) {
+        const now = Date.now();
+        const timeSinceActivity = now - sessionData.last_activity;
         const SESSION_TIMEOUT = 30 * 60 * 1000; // 30 minutes
 
-        if (sessionAge < SESSION_TIMEOUT) {
-          // Session is still valid, update timestamp and return existing ID
-          AnalyticsSessionStorage.setItem("session_timestamp", Date.now());
-          return existingSessionId;
+        if (timeSinceActivity < SESSION_TIMEOUT) {
+          // Session exists and valid - already started, no session_start needed
+          return { sessionId: sessionData.session_id, isNewSession: false };
         }
 
         // Session expired, clear it
-        AnalyticsSessionStorage.removeItem("session_id");
-        AnalyticsSessionStorage.removeItem("session_timestamp");
+        AnalyticsSessionStorage.removeItem("session_data");
       }
     }
 
-    // Generate new lightweight session ID
+    // No valid session exists - create new session
     const generateLightweightId = (): string => {
       try {
         // Use crypto.getRandomValues() for secure randomness
@@ -153,14 +157,29 @@ export function VisitorTracker({
     };
 
     const newSessionId = generateLightweightId();
+    const now = Date.now();
 
-    // Store in sessionStorage with timestamp (persists across page loads, expires with browser session)
+    // Store new session in sessionStorage
     if (typeof window !== "undefined") {
-      AnalyticsSessionStorage.setItem("session_id", newSessionId);
-      AnalyticsSessionStorage.setItem("session_timestamp", Date.now());
+      AnalyticsSessionStorage.setItem("session_data", {
+        session_id: newSessionId,
+        last_activity: now,
+      });
     }
 
-    return newSessionId;
+    return { sessionId: newSessionId, isNewSession: true };
+  }, []);
+
+  // Update last activity timestamp (only called on real user interactions)
+  const updateLastActivity = useCallback(() => {
+    if (typeof window !== "undefined") {
+      const sessionData =
+        AnalyticsSessionStorage.getItem<SessionData>("session_data");
+      if (sessionData) {
+        sessionData.last_activity = Date.now();
+        AnalyticsSessionStorage.setItem("session_data", sessionData);
+      }
+    }
   }, []);
 
   // Get enhanced client-side data
@@ -179,7 +198,7 @@ export function VisitorTracker({
 
     // Check if this is a new visitor using session-level caching
     const visitorId = generateVisitorId(ip);
-    const sessionId = generateSessionId();
+    const { sessionId } = generateSessionId();
     const sessionCacheKey = `isNewVisitor_${sessionId}`;
 
     // Check if we already determined isNewVisitor for this session
@@ -282,7 +301,7 @@ export function VisitorTracker({
         siteId,
         path: customPath || route,
         visitorId: generateVisitorId(ip),
-        sessionId: generateSessionId(),
+        sessionId: generateSessionId().sessionId,
         eventType,
         isBot: false,
         // Enhanced client-side fields
@@ -411,10 +430,25 @@ export function VisitorTracker({
     }
 
     heartbeatIntervalRef.current = setTimeout(() => {
-      // Check if user has been inactive for more than current interval
-      const timeSinceActivity = Date.now() - lastActivityRef.current;
-      const inactivityThreshold = 2 * 60 * 1000; // 2 minutes
+      // Get session data once for all checks
+      const sessionData =
+        typeof window !== "undefined"
+          ? AnalyticsSessionStorage.getItem<SessionData>("session_data")
+          : null;
+      const timeSinceActivity = sessionData
+        ? Date.now() - sessionData.last_activity
+        : 0;
 
+      const inactivityThreshold = 2 * 60 * 1000; // 2 minutes
+      const SESSION_TIMEOUT = 30 * 60 * 1000; // 30 minutes
+
+      // Hard cutoff: terminate heartbeats after 30 minutes of inactivity
+      if (timeSinceActivity >= SESSION_TIMEOUT) {
+        heartbeatEnabledRef.current = false;
+        return;
+      }
+
+      // Check if user has been inactive for more than 2 minutes
       if (timeSinceActivity > inactivityThreshold) {
         // User is inactive, pause heartbeats
         isActiveRef.current = false;
@@ -426,35 +460,16 @@ export function VisitorTracker({
         sendAnalyticsEvent("heartbeat", undefined, pathname || route);
       }
 
-      // Progressive backoff: increase interval if no recent activity, extended to 30 minutes
-      const intervals = [
-        15000, 30000, 60000, 120000, 300000, 600000, 900000, 1800000,
-      ]; // 15s, 30s, 1m, 2m, 5m, 10m, 15m, 30m
+      // Progressive engagement tracking: optimized for bounce detection
+      const intervals = [15000, 60000, 300000, 900000]; // 15s, 1m, 5m, 15m
       const currentIndex = intervals.indexOf(currentIntervalRef.current);
 
-      // Check session age to implement graceful termination
-      const sessionTimestamp =
-        typeof window !== "undefined"
-          ? AnalyticsSessionStorage.getItem<number>("session_timestamp")
-          : null;
-      const sessionAge = sessionTimestamp ? Date.now() - sessionTimestamp : 0;
-      const SESSION_TIMEOUT = 30 * 60 * 1000; // 30 minutes
-
-      // If session is near expiry (28+ minutes), slow down heartbeats significantly
-      if (sessionAge > SESSION_TIMEOUT - 2 * 60 * 1000) {
-        // Last 2 minutes of session
-        currentIntervalRef.current = 1800000; // 30 minutes
-      } else if (
+      // Progressive engagement intervals: advance to next interval based on inactivity
+      if (
         timeSinceActivity > currentIntervalRef.current &&
         currentIndex < intervals.length - 1
       ) {
         currentIntervalRef.current = intervals[currentIndex + 1];
-      }
-
-      // Gracefully terminate heartbeats after 30 minutes
-      if (sessionAge >= SESSION_TIMEOUT) {
-        heartbeatEnabledRef.current = false;
-        return;
       }
 
       // Schedule next heartbeat
@@ -464,25 +479,33 @@ export function VisitorTracker({
 
   const handleActivity = useCallback(() => {
     const now = Date.now();
-    lastActivityRef.current = now;
     isActiveRef.current = true;
 
-    // Check if session has expired and restart if needed
-    const sessionTimestamp =
+    // Check if session has expired BEFORE updating activity
+    const sessionData =
       typeof window !== "undefined"
-        ? AnalyticsSessionStorage.getItem<number>("session_timestamp")
+        ? AnalyticsSessionStorage.getItem<SessionData>("session_data")
         : null;
-    const sessionAge = sessionTimestamp ? now - sessionTimestamp : 0;
+    const timeSinceActivity = sessionData
+      ? now - sessionData.last_activity
+      : Infinity;
     const SESSION_TIMEOUT = 30 * 60 * 1000; // 30 minutes
 
-    if (sessionAge > SESSION_TIMEOUT) {
-      // Session expired, generate new session and send session_start
-      generateSessionId();
-      sendAnalyticsEvent("session_start", undefined, pathname || route);
+    if (timeSinceActivity > SESSION_TIMEOUT) {
+      // Session expired, generate new session
+      const { isNewSession } = generateSessionId();
+
+      // Send session_start only if this is genuinely a new session
+      if (isNewSession) {
+        sendAnalyticsEvent("session_start", undefined, pathname || route);
+      }
 
       // Re-enable heartbeats for new session
       heartbeatEnabledRef.current = true;
     }
+
+    // Update last activity timestamp for this user interaction
+    updateLastActivity();
 
     // Reset to fastest interval on activity
     currentIntervalRef.current = 15000;
@@ -497,6 +520,7 @@ export function VisitorTracker({
     sendAnalyticsEvent,
     pathname,
     route,
+    updateLastActivity,
   ]);
 
   const throttleRef = useRef<{
@@ -535,10 +559,37 @@ export function VisitorTracker({
       // Resume heartbeats when tab becomes visible
       heartbeatEnabledRef.current = true;
       isActiveRef.current = true;
-      lastActivityRef.current = Date.now();
+
+      // Check if session expired while hidden - don't reset timeout just for visibility
+      const sessionData =
+        typeof window !== "undefined"
+          ? AnalyticsSessionStorage.getItem<SessionData>("session_data")
+          : null;
+      const timeSinceActivity = sessionData
+        ? Date.now() - sessionData.last_activity
+        : Infinity;
+      const SESSION_TIMEOUT = 30 * 60 * 1000; // 30 minutes
+
+      if (timeSinceActivity > SESSION_TIMEOUT) {
+        // Session expired while hidden - create new session
+        const { isNewSession } = generateSessionId();
+
+        // Send session_start only if this is genuinely a new session
+        if (isNewSession) {
+          sendAnalyticsEvent("session_start", undefined, pathname || route);
+        }
+      }
+
+      // Don't update activity timestamp just for visibility - wait for real user action
       scheduleNextHeartbeat();
     }
-  }, [scheduleNextHeartbeat]);
+  }, [
+    scheduleNextHeartbeat,
+    generateSessionId,
+    sendAnalyticsEvent,
+    pathname,
+    route,
+  ]);
 
   // Track session start, pageview and setup session end
   useEffect(() => {
@@ -563,16 +614,16 @@ export function VisitorTracker({
     if (!isInitialized.current) {
       isInitialized.current = true;
 
-      const sessionId = generateSessionId();
-      const isSessionActive = AnalyticsStorage.isSessionActive(sessionId);
+      const { sessionId, isNewSession } = generateSessionId();
 
-      // Send session_start if this is a new session
-      if (!isSessionActive) {
+      // Send session_start only for genuinely new sessions
+      if (isNewSession) {
         sendAnalyticsEvent("session_start", undefined, currentPath);
         AnalyticsStorage.setSessionActive(sessionId);
       }
 
-      // Track initial pageview
+      // Track initial pageview (counts as user activity)
+      updateLastActivity();
       const referrer =
         document.referrer && document.referrer.length > 0
           ? document.referrer
@@ -582,17 +633,8 @@ export function VisitorTracker({
 
       // Set up heartbeat system and activity tracking
       if (typeof window !== "undefined") {
-        // Add activity event listeners
-        const events = [
-          "mousemove",
-          "mousedown",
-          "click",
-          "keydown",
-          "keyup",
-          "scroll",
-          "touchstart",
-          "touchmove",
-        ];
+        // Add activity event listeners (meaningful interactions only)
+        const events = ["click", "keydown", "touchstart"];
         events.forEach((event) => {
           window.addEventListener(event, throttledHandleActivity, {
             passive: true,
@@ -603,7 +645,6 @@ export function VisitorTracker({
         document.addEventListener("visibilitychange", handleVisibilityChange);
 
         // Start heartbeat system
-        lastActivityRef.current = Date.now();
         scheduleNextHeartbeat();
 
         // Cleanup function
@@ -626,7 +667,8 @@ export function VisitorTracker({
     }
     // Handle route changes (client-side navigation)
     else if (currentPath !== lastTrackedPath.current) {
-      // Track pageview for route change
+      // Track pageview for route change (counts as user activity)
+      updateLastActivity();
       sendAnalyticsEvent("pageview", undefined, currentPath);
       lastTrackedPath.current = currentPath;
     }
@@ -655,6 +697,7 @@ export function VisitorTracker({
     getClientData,
     checkIfBot,
     generateSessionId,
+    updateLastActivity,
     scheduleNextHeartbeat,
     throttledHandleActivity,
     handleVisibilityChange,
