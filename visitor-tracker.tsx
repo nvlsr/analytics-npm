@@ -624,6 +624,18 @@ export function VisitorTracker({
           "click",
           "keydown", 
           "touchstart",
+          "scroll",
+          "wheel",
+          "play",
+          "pause",
+          "seeked",
+          "volumechange",
+          "input",
+          "change",
+          "focus",
+          "copy",
+          "cut",
+          "paste",
         ];
         events.forEach((event) => {
           window.addEventListener(event, throttledHandleActivity, {
