@@ -211,31 +211,40 @@ export function VisitorTracker({
       };
     }
 
-    // Check if this is a new visitor using session-level caching
+    // Check if this is a new visitor
     const visitorId = generateVisitorId(ip, username);
     const { sessionId } = generateSessionId();
-    const sessionCacheKey = `isNewVisitor_${sessionId}`;
-
-    // Check if we already determined isNewVisitor for this session
-    const cachedIsNewVisitor =
-      AnalyticsSessionStorage.getItem<boolean>(sessionCacheKey);
     let isNewVisitor: boolean;
 
-    if (cachedIsNewVisitor === null) {
-      // First event in this session - make the determination
-      const visitorExists = AnalyticsStorage.hasVisitor(visitorId);
-      isNewVisitor = !visitorExists;
-
-      // Cache the decision for this entire session
-      AnalyticsSessionStorage.setItem(sessionCacheKey, isNewVisitor);
-
-      // Mark visitor as seen for future sessions (only if they're new)
-      if (isNewVisitor) {
-        AnalyticsStorage.setVisitor(visitorId);
-      }
+    // IMPORTANT: Authenticated users are NEVER new visitors
+    // They have an account, so by definition they've been here before
+    if (username && username.trim() !== "") {
+      isNewVisitor = false;
     } else {
-      // Use the cached decision from earlier in this session
-      isNewVisitor = cachedIsNewVisitor;
+      // For anonymous visitors, check if we've seen them before
+      // Cache by visitor ID (not session ID) to be consistent across sessions
+      const visitorCacheKey = `isNewVisitor_${visitorId}`;
+
+      // Check if we already determined isNewVisitor for this visitor
+      const cachedIsNewVisitor =
+        AnalyticsSessionStorage.getItem<boolean>(visitorCacheKey);
+
+      if (cachedIsNewVisitor === null) {
+        // First time checking this visitor - look in localStorage
+        const visitorExists = AnalyticsStorage.hasVisitor(visitorId);
+        isNewVisitor = !visitorExists;
+
+        // Cache the decision for this visitor for the browser session
+        AnalyticsSessionStorage.setItem(visitorCacheKey, isNewVisitor);
+
+        // Mark visitor as seen for future visits (only if they're new)
+        if (isNewVisitor) {
+          AnalyticsStorage.setVisitor(visitorId);
+        }
+      } else {
+        // Use the cached decision from earlier for this visitor
+        isNewVisitor = cachedIsNewVisitor;
+      }
     }
 
     // Get session start time (persistent for this session)
