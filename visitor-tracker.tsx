@@ -8,31 +8,28 @@ import { AnalyticsStorage, AnalyticsSessionStorage } from "./storage-utils";
 
 interface SessionData {
   session_id: string;
-  last_activity: number; // Last user activity (updated on user actions only)
+  last_activity: number;
 }
 
 function generateVisitorId(ip: string, username?: string | null): string {
   if (username && username.trim() !== "") {
-    // Convert username to readable slug: "Carolyn Smith" -> "carolyn-smith"
     return (
       username
         .trim()
         .toLowerCase()
-        .replace(/\s+/g, "-") // Replace spaces with hyphens
-        .replace(/[^a-z0-9-]/g, "") // Remove non-alphanumeric except hyphens
-        .replace(/-+/g, "-") // Replace multiple hyphens with single
-        .replace(/^-+|-+$/g, "") // Remove leading/trailing hyphens
-        .substring(0, 50) || // Limit length for database
-      "unknown-user"
-    ); // Fallback if result is empty
+        .replace(/\s+/g, "-")
+        .replace(/[^a-z0-9-]/g, "")
+        .replace(/-+/g, "-")
+        .replace(/^-+|-+$/g, "")
+        .substring(0, 50) || "unknown-user"
+    );
   }
 
-  // For anonymous users, create readable IP-based ID: "184.183.94.207" -> "ip-184-183-94-207"
   const cleanIp = ip
-    .replace(/[.:]/g, "-") // Replace dots and colons with hyphens (IPv4 & IPv6)
-    .replace(/[^0-9a-f-]/gi, "") // Keep only hex chars, numbers, and hyphens
+    .replace(/[.:]/g, "-")
+    .replace(/[^0-9a-f-]/gi, "")
     .toLowerCase()
-    .substring(0, 50); // Limit length
+    .substring(0, 50);
 
   return `ip-${cleanIp}` || "ip-unknown";
 }
@@ -52,7 +49,6 @@ export interface VisitorTrackerProps {
   deploymentUrl?: string | null;
   route: string;
   userAgent: string;
-  // Optional server-side header data
   edgeRegion?: string | null;
   username?: string | null;
 }
@@ -79,27 +75,21 @@ export function VisitorTracker({
   const isInitialized = useRef<boolean>(false);
   const lastTrackedPath = useRef<string>(route);
 
-  // Heartbeat state management
   const heartbeatIntervalRef = useRef<NodeJS.Timeout | undefined>(undefined);
-  const currentIntervalRef = useRef<number>(15000); // Start at 15s
+  const currentIntervalRef = useRef<number>(15000);
   const isActiveRef = useRef<boolean>(true);
   const heartbeatEnabledRef = useRef<boolean>(true);
 
-  // Check if this is a bot environment
   const checkIfBot = useCallback(() => {
-    // Check server-provided user agent first
     if (isbot(userAgent)) {
       return true;
     }
 
-    // Check client-side navigator user agent
     if (typeof navigator !== "undefined" && isbot(navigator.userAgent)) {
       return true;
     }
 
-    // Additional client-side bot checks
     if (typeof window !== "undefined") {
-      // Check for headless browser indicators
       const win = window as Window & {
         navigator?: Navigator & { webdriver?: boolean };
         phantom?: unknown;
@@ -115,7 +105,6 @@ export function VisitorTracker({
         return true;
       }
 
-      // Check for missing typical browser features that bots might lack
       if (!window.localStorage || !window.sessionStorage) {
         return true;
       }
@@ -128,7 +117,6 @@ export function VisitorTracker({
     sessionId: string;
     isNewSession: boolean;
   } => {
-    // Check for existing session ID with 30-minute timeout based on last activity
     if (typeof window !== "undefined") {
       const sessionData =
         AnalyticsSessionStorage.getItem<SessionData>("session_data");
@@ -136,35 +124,29 @@ export function VisitorTracker({
       if (sessionData?.session_id) {
         const now = Date.now();
         const timeSinceActivity = now - sessionData.last_activity;
-        const SESSION_TIMEOUT = 30 * 60 * 1000; // 30 minutes
+        const SESSION_TIMEOUT = 30 * 60 * 1000;
 
         if (timeSinceActivity < SESSION_TIMEOUT) {
-          // Session exists and valid - already started, no session_start needed
           return { sessionId: sessionData.session_id, isNewSession: false };
         }
 
-        // Session expired, clear it
         AnalyticsSessionStorage.removeItem("session_data");
       }
     }
 
-    // No valid session exists - create new session
     const generateLightweightId = (): string => {
       try {
-        // Use crypto.getRandomValues() for secure randomness
         const array = new Uint8Array(4);
         crypto.getRandomValues(array);
 
-        // Convert to base36 and combine with timestamp
-        const timestamp = Date.now().toString(36).slice(-4); // Last 4 chars of timestamp in base36
+        const timestamp = Date.now().toString(36).slice(-4);
         const randomPart = Array.from(array)
           .map((byte) => byte.toString(36))
           .join("")
-          .slice(0, 4); // Take first 4 chars
+          .slice(0, 4);
 
         return `${timestamp}${randomPart}`.substring(0, 8);
       } catch {
-        // Fallback to Math.random() if crypto is unavailable
         const timestamp = Date.now().toString(36).slice(-4);
         const randomPart = Math.random().toString(36).substring(2, 6);
         return `${timestamp}${randomPart}`.substring(0, 8);
@@ -185,7 +167,6 @@ export function VisitorTracker({
     return { sessionId: newSessionId, isNewSession: true };
   }, []);
 
-  // Update last activity timestamp (only called on real user interactions)
   const updateLastActivity = useCallback(() => {
     if (typeof window !== "undefined") {
       const sessionData =
@@ -197,9 +178,7 @@ export function VisitorTracker({
     }
   }, []);
 
-  // Get enhanced client-side data
   const getClientData = useCallback(() => {
-    // SSR Guard: Return safe defaults if running on server
     if (typeof window === "undefined") {
       return {
         isNewVisitor: true,
@@ -211,55 +190,46 @@ export function VisitorTracker({
       };
     }
 
-    // Check if this is a new visitor
     const visitorId = generateVisitorId(ip, username);
     const { sessionId } = generateSessionId();
     let isNewVisitor: boolean;
 
-    // IMPORTANT: Authenticated users are NEVER new visitors
-    // They have an account, so by definition they've been here before
     if (username && username.trim() !== "") {
       isNewVisitor = false;
     } else {
-      // For anonymous visitors, check if we've seen them before
-      // Cache by visitor ID (not session ID) to be consistent across sessions
       const visitorCacheKey = `isNewVisitor_${visitorId}`;
 
-      // Check if we already determined isNewVisitor for this visitor
       const cachedIsNewVisitor =
         AnalyticsSessionStorage.getItem<boolean>(visitorCacheKey);
 
       if (cachedIsNewVisitor === null) {
-        // First time checking this visitor - look in localStorage
         const visitorExists = AnalyticsStorage.hasVisitor(visitorId);
         isNewVisitor = !visitorExists;
 
-        // Cache the decision for this visitor for the browser session
         AnalyticsSessionStorage.setItem(visitorCacheKey, isNewVisitor);
 
-        // Mark visitor as seen for future visits (only if they're new)
         if (isNewVisitor) {
           AnalyticsStorage.setVisitor(visitorId);
         }
       } else {
-        // Use the cached decision from earlier for this visitor
         isNewVisitor = cachedIsNewVisitor;
       }
     }
 
-    // Get session start time (persistent for this session)
-    // Note: reusing sessionId from above
-    let sessionStartTime = AnalyticsStorage.getSessionStart(sessionId);
+    let sessionStartTime = AnalyticsSessionStorage.getItem<string>(
+      `session_start_${sessionId}`
+    );
     if (!sessionStartTime) {
       sessionStartTime = new Date().toISOString();
-      AnalyticsStorage.setSessionStart(sessionId, sessionStartTime);
+      AnalyticsSessionStorage.setItem(
+        `session_start_${sessionId}`,
+        sessionStartTime
+      );
     }
 
-    // Get screen and viewport data (safe now that we're client-side)
     const screenResolution = `${screen.width}x${screen.height}`;
     const viewportSize = `${window.innerWidth}x${window.innerHeight}`;
 
-    // Get connection type (if available)
     const connectionType = (() => {
       try {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -272,7 +242,6 @@ export function VisitorTracker({
       }
     })();
 
-    // Get client timezone
     const clientTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
     return {
@@ -285,14 +254,12 @@ export function VisitorTracker({
     };
   }, [ip, username, generateSessionId]);
 
-  // Send event to analytics system
   const sendAnalyticsEvent = useCallback(
     async (
       eventType: "pageview" | "session_start" | "heartbeat",
       referrer?: string,
       customPath?: string
     ) => {
-      // Skip analytics in development
       if (process.env.NODE_ENV !== "production") {
         return;
       }
@@ -300,7 +267,6 @@ export function VisitorTracker({
       const siteId = getSiteIdWithFallback(host || null);
       const edgeEndpoint = "https://analytics-ingestion.maaakri.workers.dev";
 
-      // Extract standard client-side data with SSR guards
       const language =
         typeof navigator !== "undefined"
           ? navigator.language || navigator.languages?.[0] || undefined
@@ -310,9 +276,8 @@ export function VisitorTracker({
       const isMobile =
         typeof navigator !== "undefined"
           ? /Mobi|Android/i.test(navigator.userAgent)
-          : /Mobi|Android/i.test(userAgent); // Fallback to server userAgent
+          : /Mobi|Android/i.test(userAgent);
 
-      // Get enhanced client data
       const clientData = getClientData();
 
       const devCountry = country;
@@ -320,7 +285,6 @@ export function VisitorTracker({
       const devRegion = region;
       const devEdgeRegion = edgeRegion;
 
-      // Prepare event payload
       const eventPayload = {
         siteId,
         path: customPath || route,
@@ -328,14 +292,12 @@ export function VisitorTracker({
         sessionId: generateSessionId().sessionId,
         eventType,
         isBot: false,
-        // Enhanced client-side fields
         isNewVisitor: clientData.isNewVisitor,
         screenResolution: clientData.screenResolution,
         viewportSize: clientData.viewportSize,
         connectionType: clientData.connectionType,
         clientTimeZone: clientData.clientTimeZone,
         sessionStartTime: clientData.sessionStartTime,
-        // Server-side fields
         ipAddress: ip,
         userAgent,
         referrer,
@@ -357,11 +319,10 @@ export function VisitorTracker({
         username: username || undefined,
       };
 
-      // Send to Cloudflare worker endpoint (fire-and-forget)
       void (async () => {
         try {
           const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+          const timeoutId = setTimeout(() => controller.abort(), 10000);
 
           const response = await fetch(edgeEndpoint, {
             method: "POST",
@@ -375,7 +336,6 @@ export function VisitorTracker({
 
           clearTimeout(timeoutId);
 
-          // Check for server endpoint issues
           if (!response.ok) {
             console.error(
               `[Jillen.Analytics] Server endpoint error: ${response.status} ${response.statusText} - visitor tracking failed`
@@ -383,7 +343,6 @@ export function VisitorTracker({
             return;
           }
         } catch (error) {
-          // Log specific error types for debugging
           if (error instanceof TypeError) {
             if (
               error.message.includes("fetch failed") ||
@@ -418,7 +377,6 @@ export function VisitorTracker({
               error
             );
           }
-          // Silent error handling - don't block the page
         }
       })();
     },
@@ -444,20 +402,16 @@ export function VisitorTracker({
     ]
   );
 
-  // Heartbeat management functions
   const scheduleNextHeartbeat = useCallback(() => {
     if (!heartbeatEnabledRef.current || typeof window === "undefined") return;
 
-    // Don't reschedule if a heartbeat is already pending
     if (heartbeatIntervalRef.current) {
       return;
     }
 
     heartbeatIntervalRef.current = setTimeout(() => {
-      // Clear the reference since this timer has fired
       heartbeatIntervalRef.current = undefined;
 
-      // Get session data once for all checks
       const sessionData =
         typeof window !== "undefined"
           ? AnalyticsSessionStorage.getItem<SessionData>("session_data")
@@ -466,32 +420,26 @@ export function VisitorTracker({
         ? Date.now() - sessionData.last_activity
         : 0;
 
-      const inactivityThreshold = 2 * 60 * 1000; // 2 minutes
-      const SESSION_TIMEOUT = 30 * 60 * 1000; // 30 minutes
+      const inactivityThreshold = 2 * 60 * 1000;
+      const SESSION_TIMEOUT = 30 * 60 * 1000;
 
-      // Hard cutoff: terminate heartbeats after 30 minutes of inactivity
       if (timeSinceActivity >= SESSION_TIMEOUT) {
         heartbeatEnabledRef.current = false;
         return;
       }
 
-      // Check if user has been inactive for more than 2 minutes
       if (timeSinceActivity > inactivityThreshold) {
-        // User is inactive, pause heartbeats
         isActiveRef.current = false;
         return;
       }
 
-      // Send heartbeat
       if (isActiveRef.current && !document.hidden) {
         sendAnalyticsEvent("heartbeat", undefined, pathname || route);
       }
 
-      // Progressive engagement tracking: optimized for bounce detection
-      const intervals = [15000, 60000, 300000, 900000]; // 15s, 1m, 5m, 15m
+      const intervals = [15000, 60000, 300000, 900000];
       const currentIndex = intervals.indexOf(currentIntervalRef.current);
 
-      // Progressive engagement intervals: advance to next interval based on inactivity
       if (
         timeSinceActivity > currentIntervalRef.current &&
         currentIndex < intervals.length - 1
@@ -499,7 +447,6 @@ export function VisitorTracker({
         currentIntervalRef.current = intervals[currentIndex + 1];
       }
 
-      // Schedule next heartbeat
       scheduleNextHeartbeat();
     }, currentIntervalRef.current);
   }, [pathname, route, sendAnalyticsEvent]);
@@ -508,7 +455,6 @@ export function VisitorTracker({
     const now = Date.now();
     isActiveRef.current = true;
 
-    // Check if session has expired BEFORE updating activity
     const sessionData =
       typeof window !== "undefined"
         ? AnalyticsSessionStorage.getItem<SessionData>("session_data")
@@ -516,16 +462,13 @@ export function VisitorTracker({
     const timeSinceActivity = sessionData
       ? now - sessionData.last_activity
       : Infinity;
-    const SESSION_TIMEOUT = 30 * 60 * 1000; // 30 minutes
+    const SESSION_TIMEOUT = 30 * 60 * 1000;
 
     if (timeSinceActivity > SESSION_TIMEOUT) {
-      // Session expired, generate new session
       const { isNewSession } = generateSessionId();
 
-      // Send session_start and pageview for the new session
       if (isNewSession) {
         sendAnalyticsEvent("session_start", undefined, pathname || route);
-        // Also send pageview since user is returning to this page
         sendAnalyticsEvent("pageview", undefined, pathname || route);
       }
 
@@ -533,13 +476,10 @@ export function VisitorTracker({
       heartbeatEnabledRef.current = true;
     }
 
-    // Update last activity timestamp for this user interaction
     updateLastActivity();
 
-    // Reset to fastest interval on activity
     currentIntervalRef.current = 15000;
 
-    // Try to schedule heartbeat (will be skipped if one is already pending)
     if (heartbeatEnabledRef.current) {
       scheduleNextHeartbeat();
     }
@@ -579,54 +519,45 @@ export function VisitorTracker({
     if (typeof document === "undefined") return;
 
     if (document.hidden) {
-      // Pause heartbeats when tab is hidden
       heartbeatEnabledRef.current = false;
       if (heartbeatIntervalRef.current) {
         clearTimeout(heartbeatIntervalRef.current);
         heartbeatIntervalRef.current = undefined;
       }
     } else {
-      // Resume heartbeats when tab becomes visible
       heartbeatEnabledRef.current = true;
       isActiveRef.current = true;
 
-      // Just resume heartbeats - let handleActivity deal with session expiry
       scheduleNextHeartbeat();
     }
   }, [scheduleNextHeartbeat]);
 
-  // Track session start, pageview and setup session end
   useEffect(() => {
-    // SSR Guard: Only run on client
     if (typeof window === "undefined") return;
 
-    // Only track in production environment
     const isProduction = process.env.NODE_ENV === "production";
 
     if (!isProduction) {
       return;
     }
 
-    // Check if this is a bot - if so, skip all client-side tracking
     if (checkIfBot()) {
       return;
     }
 
     const currentPath = pathname || route;
 
-    // Initial setup on first load
     if (!isInitialized.current) {
       isInitialized.current = true;
 
-      const { sessionId, isNewSession } = generateSessionId();
+      AnalyticsStorage.cleanupOldSessionEntries();
 
-      // Send session_start only for genuinely new sessions
+      const { isNewSession } = generateSessionId();
+
       if (isNewSession) {
         sendAnalyticsEvent("session_start", undefined, currentPath);
-        AnalyticsStorage.setSessionActive(sessionId);
       }
 
-      // Track initial pageview (counts as user activity)
       updateLastActivity();
       const referrer =
         document.referrer && document.referrer.length > 0
@@ -635,9 +566,7 @@ export function VisitorTracker({
       sendAnalyticsEvent("pageview", referrer, currentPath);
       lastTrackedPath.current = currentPath;
 
-      // Set up heartbeat system and activity tracking
       if (typeof window !== "undefined") {
-        // Add activity event listeners (meaningful interactions only)
         const events = [
           "click",
           "keydown",
@@ -661,15 +590,11 @@ export function VisitorTracker({
           });
         });
 
-        // Add visibility change listener
         document.addEventListener("visibilitychange", handleVisibilityChange);
 
-        // Start heartbeat system
         scheduleNextHeartbeat();
 
-        // Cleanup function
         return () => {
-          // Remove event listeners
           events.forEach((event) => {
             window.removeEventListener(event, throttledHandleActivity);
           });
@@ -678,22 +603,17 @@ export function VisitorTracker({
             handleVisibilityChange
           );
 
-          // Clear heartbeat timer
           if (heartbeatIntervalRef.current) {
             clearTimeout(heartbeatIntervalRef.current);
           }
         };
       }
-    }
-    // Handle route changes (client-side navigation)
-    else if (currentPath !== lastTrackedPath.current) {
-      // Track pageview for route change (counts as user activity)
+    } else if (currentPath !== lastTrackedPath.current) {
       updateLastActivity();
       sendAnalyticsEvent("pageview", undefined, currentPath);
       lastTrackedPath.current = currentPath;
     }
 
-    // Explicit return for when no action is needed
     return;
   }, [
     pathname,
@@ -721,7 +641,7 @@ export function VisitorTracker({
     scheduleNextHeartbeat,
     throttledHandleActivity,
     handleVisibilityChange,
-  ]); // Re-run if pathname or route changes
+  ]);
 
-  return null; // This component renders nothing
+  return null;
 }

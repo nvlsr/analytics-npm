@@ -6,9 +6,7 @@ interface StorageItem<T> {
 const ANALYTICS_STORAGE_PREFIX = "analytics_";
 
 const DEFAULT_TTL = {
-  VISITOR: 30 * 24 * 60 * 60 * 1000, // 30 days
-  SESSION: 24 * 60 * 60 * 1000, // 24 hours
-  SESSION_ACTIVE: 2 * 60 * 60 * 1000, // 2 hours (extended session timeout)
+  VISITOR: 30 * 24 * 60 * 60 * 1000,
 } as const;
 
 export class AnalyticsStorage {
@@ -17,7 +15,7 @@ export class AnalyticsStorage {
   static setItem<T>(
     key: string,
     value: T,
-    ttlMs: number = DEFAULT_TTL.SESSION
+    ttlMs: number = DEFAULT_TTL.VISITOR
   ): boolean {
     if (!this.isClient) return false;
 
@@ -46,7 +44,6 @@ export class AnalyticsStorage {
 
       const item: StorageItem<T> = JSON.parse(itemStr);
 
-      // Check if item has expired
       if (Date.now() > item.expiry) {
         localStorage.removeItem(`${ANALYTICS_STORAGE_PREFIX}${key}`);
         return null;
@@ -81,28 +78,32 @@ export class AnalyticsStorage {
     return this.getItem<number>(`visitor_${visitorId}`) !== null;
   }
 
-  static setSessionStart(sessionId: string, startTime: string): boolean {
-    return this.setItem(
-      `session_start_${sessionId}`,
-      startTime,
-      DEFAULT_TTL.SESSION
-    );
-  }
+  static cleanupOldSessionEntries(): number {
+    if (!this.isClient) return 0;
 
-  static getSessionStart(sessionId: string): string | null {
-    return this.getItem<string>(`session_start_${sessionId}`);
-  }
+    let cleanedCount = 0;
+    const obsoletePrefixes = [
+      `${ANALYTICS_STORAGE_PREFIX}session_start_`,
+      `${ANALYTICS_STORAGE_PREFIX}session_active_`,
+    ];
 
-  static setSessionActive(sessionId: string): boolean {
-    return this.setItem(
-      `session_active_${sessionId}`,
-      true,
-      DEFAULT_TTL.SESSION_ACTIVE
-    );
-  }
+    try {
+      const keys = Object.keys(localStorage);
 
-  static isSessionActive(sessionId: string): boolean {
-    return this.getItem<boolean>(`session_active_${sessionId}`) === true;
+      for (const key of keys) {
+        for (const prefix of obsoletePrefixes) {
+          if (key.startsWith(prefix)) {
+            localStorage.removeItem(key);
+            cleanedCount++;
+            break;
+          }
+        }
+      }
+    } catch (error) {
+      console.warn("[Analytics] Failed to cleanup old session entries:", error);
+    }
+
+    return cleanedCount;
   }
 
   static cleanupExpiredItems(): number {
@@ -127,7 +128,6 @@ export class AnalyticsStorage {
             cleanedCount++;
           }
         } catch {
-          // If we can't parse it, it might be old format - remove it
           localStorage.removeItem(key);
           cleanedCount++;
         }
@@ -157,11 +157,9 @@ export class AnalyticsStorage {
           if (key.startsWith(prefix)) {
             const value = localStorage.getItem(key);
             if (value && !value.includes('"expiry":')) {
-              // Old format detected
               localStorage.removeItem(key);
               migratedCount++;
 
-              // Optionally re-add with expiry if recent
               const keyParts = key.replace(prefix, "").split("_");
               if (prefix === "analytics_visitor_" && keyParts.length > 0) {
                 const timestamp = parseInt(value);
@@ -207,7 +205,6 @@ export class AnalyticsStorage {
   }
 }
 
-// Session storage wrappers (for session-only data that shouldn't persist)
 export class AnalyticsSessionStorage {
   private static isClient = typeof window !== "undefined";
 
