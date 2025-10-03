@@ -76,7 +76,7 @@ export function VisitorTracker({
   const lastTrackedPath = useRef<string>(route);
 
   const heartbeatIntervalRef = useRef<NodeJS.Timeout | undefined>(undefined);
-  const currentIntervalRef = useRef<number>(15000);
+  const currentIntervalRef = useRef<number>(5000);
   const isActiveRef = useRef<boolean>(true);
   const heartbeatEnabledRef = useRef<boolean>(true);
 
@@ -437,7 +437,7 @@ export function VisitorTracker({
         sendAnalyticsEvent("heartbeat", undefined, pathname || route);
       }
 
-      const intervals = [15000, 60000, 300000, 900000];
+      const intervals = [5000, 10000, 20000, 60000, 300000, 900000];
       const currentIndex = intervals.indexOf(currentIntervalRef.current);
 
       if (
@@ -478,7 +478,7 @@ export function VisitorTracker({
 
     updateLastActivity();
 
-    currentIntervalRef.current = 15000;
+    currentIntervalRef.current = 5000;
 
     if (heartbeatEnabledRef.current) {
       scheduleNextHeartbeat();
