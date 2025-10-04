@@ -230,17 +230,8 @@ export function VisitorTracker({
     const screenResolution = `${screen.width}x${screen.height}`;
     const viewportSize = `${window.innerWidth}x${window.innerHeight}`;
 
-    const connectionType = (() => {
-      try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const nav = navigator as any;
-        return (
-          nav.connection?.effectiveType || nav.connection?.type || "unknown"
-        );
-      } catch {
-        return "unknown";
-      }
-    })();
+    const isMobile = /Mobile|Android|iPhone|iPad/.test(navigator.userAgent);
+    const connectionType = isMobile ? "mobile" : "desktop";
 
     const clientTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
