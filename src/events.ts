@@ -4,6 +4,7 @@ export interface BaseEventData {
   visitor_id: string;
   session_id: string;
   event_type: 'pageview' | 'session_start' | 'heartbeat';
+  sdkVersion?: string;
 }
 
 export interface ServerEnrichedFields {
@@ -30,12 +31,14 @@ export interface BotEventData {
   bot_name: string;
   bot_category: 'SEO' | 'SOCIAL' | 'AI' | 'UNKNOWN';
   timestamp: string;
+  sdkVersion?: string;
 }
 
 export interface PerformanceEventData {
   website_domain: string;
   visitor_id: string;
   page: string;
+  sdkVersion?: string;
   dns_lookup?: number;
   tcp_connect?: number;
   ttfb: number;

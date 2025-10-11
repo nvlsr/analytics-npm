@@ -2,6 +2,7 @@ import type { NextRequest } from 'next/server';
 import { extractBotInfo } from './bot-registry';
 import type { BotEventData, HumanEventData, PerformanceEventData } from './events';
 import { getSiteIdWithFallback } from './analytics-host-utils';
+import { sdkVersion } from './version';
 
 interface SendOptions {
   useBeacon?: boolean;
@@ -17,7 +18,8 @@ export async function sendHumanEvent(
   options: SendOptions = {}
 ): Promise<void> {
   const endpoint = "https://analytics.jillen.com/api/log/data";
-  const data = JSON.stringify(payload);
+  const payloadWithVersion = { ...payload, sdkVersion };
+  const data = JSON.stringify(payloadWithVersion);
   
   // Try Beacon API first (unless explicitly disabled)
   if (!options.forceFetch && typeof navigator !== 'undefined' && navigator.sendBeacon) {
@@ -67,7 +69,8 @@ export async function sendPerformanceEvent(
   options: SendOptions = {}
 ): Promise<void> {
   const endpoint = "https://analytics.jillen.com/api/log/metrics";
-  const data = JSON.stringify(payload);
+  const payloadWithVersion = { ...payload, sdkVersion };
+  const data = JSON.stringify(payloadWithVersion);
   
   // Try Beacon API first (unless explicitly disabled)
   if (!options.forceFetch && typeof navigator !== 'undefined' && navigator.sendBeacon) {
@@ -109,6 +112,8 @@ export async function sendPerformanceEvent(
 }
 
 export async function sendBotEvent(payload: BotEventData): Promise<void> {
+  const payloadWithVersion = { ...payload, sdkVersion };
+
   try {
     const response = await fetch("https://analytics.jillen.com/api/log/ping", {
       method: "POST",
@@ -116,7 +121,7 @@ export async function sendBotEvent(payload: BotEventData): Promise<void> {
         "Content-Type": "application/json",
       },
       mode: 'cors',
-      body: JSON.stringify(payload),
+      body: JSON.stringify(payloadWithVersion),
     });
 
     if (!response.ok) {
