@@ -3,6 +3,7 @@ import { defineConfig } from 'tsup'
 export default defineConfig({
   entry: {
     index: 'src/index.ts',
+    server: 'src/server.ts',
   },
   format: ['cjs', 'esm'],
   dts: true,
@@ -24,8 +25,8 @@ export default defineConfig({
   minify: false,
   target: 'es2020',
   outDir: 'dist',
-  esbuildOptions: (options) => {
-    // Don't add global banners - let individual files handle their own directives
+  banner: {
+    js: '"use client";'
   },
   onSuccess: async () => {
     console.log('Build completed successfully!')
