@@ -3,14 +3,44 @@ import { extractBotInfo } from './bot-registry';
 import type { BotEventData, HumanEventData, PerformanceEventData } from './events';
 import { getSiteIdWithFallback } from './analytics-host-utils';
 
-export async function sendHumanEvent(payload: HumanEventData): Promise<void> {
+interface SendOptions {
+  useBeacon?: boolean;
+  forceFetch?: boolean;
+}
+
+/**
+ * Send analytics event using Beacon API with fetch fallback
+ * Beacon API: Guaranteed delivery, even on page unload
+ */
+export async function sendHumanEvent(
+  payload: HumanEventData, 
+  options: SendOptions = {}
+): Promise<void> {
+  const endpoint = "https://analytics.jillen.com/api/log/data";
+  const data = JSON.stringify(payload);
+  
+  // Try Beacon API first (unless explicitly disabled)
+  if (!options.forceFetch && typeof navigator !== 'undefined' && navigator.sendBeacon) {
+    try {
+      const blob = new Blob([data], { type: 'application/json' });
+      
+      if (navigator.sendBeacon(endpoint, blob)) {
+        return;
+      }
+    } catch (error) {
+      console.debug('[Analytics] Beacon API failed:', error);
+    }
+  }
+  
+  // Fallback to fetch with keepalive
   try {
-    const response = await fetch("https://analytics.jillen.com/api/log/data", {
+    const response = await fetch(endpoint, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify(payload),
+      body: data,
+      keepalive: true, // Attempts to complete even if page unloads
     });
 
     if (!response.ok) {
@@ -18,7 +48,6 @@ export async function sendHumanEvent(payload: HumanEventData): Promise<void> {
       return;
     }
   } catch (error) {
-    // Log specific error types for debugging
     if (error instanceof TypeError) {
       console.error("[Analytics] Configuration error in human event:", error.message);
     } else if (error instanceof Error) {
@@ -31,14 +60,37 @@ export async function sendHumanEvent(payload: HumanEventData): Promise<void> {
   }
 }
 
-export async function sendPerformanceEvent(payload: PerformanceEventData): Promise<void> {
+/**
+ * Send performance metrics using Beacon API with fetch fallback
+ */
+export async function sendPerformanceEvent(
+  payload: PerformanceEventData,
+  options: SendOptions = {}
+): Promise<void> {
+  const endpoint = "https://analytics.jillen.com/api/log/metrics";
+  const data = JSON.stringify(payload);
+  
+  // Try Beacon API first (unless explicitly disabled)
+  if (!options.forceFetch && typeof navigator !== 'undefined' && navigator.sendBeacon) {
+    try {
+      const blob = new Blob([data], { type: 'application/json' });
+      if (navigator.sendBeacon(endpoint, blob)) {
+        return;
+      }
+    } catch (error) {
+      console.debug('[Performance] Beacon API failed:', error);
+    }
+  }
+  
+  // Fallback to fetch with keepalive
   try {
-    const response = await fetch("https://analytics.jillen.com/api/log/metrics", {
+    const response = await fetch(endpoint, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify(payload),
+      body: data,
+      keepalive: true,
     });
 
     if (!response.ok) {
@@ -46,7 +98,6 @@ export async function sendPerformanceEvent(payload: PerformanceEventData): Promi
       return;
     }
   } catch (error) {
-    // Log specific error types for debugging
     if (error instanceof TypeError) {
       console.error("[Performance] Configuration error in performance event:", error.message);
     } else if (error instanceof Error) {
