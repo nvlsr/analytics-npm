@@ -22,9 +22,8 @@ export async function sendHumanEvent(
   // Try Beacon API first (unless explicitly disabled)
   if (!options.forceFetch && typeof navigator !== 'undefined' && navigator.sendBeacon) {
     try {
-      const blob = new Blob([data], { type: 'application/json' });
-      
-      if (navigator.sendBeacon(endpoint, blob)) {
+      // Send string payload to avoid non-simple CORS headers that trigger a preflight
+      if (navigator.sendBeacon(endpoint, data)) {
         return;
       }
     } catch (error) {
@@ -73,8 +72,7 @@ export async function sendPerformanceEvent(
   // Try Beacon API first (unless explicitly disabled)
   if (!options.forceFetch && typeof navigator !== 'undefined' && navigator.sendBeacon) {
     try {
-      const blob = new Blob([data], { type: 'application/json' });
-      if (navigator.sendBeacon(endpoint, blob)) {
+      if (navigator.sendBeacon(endpoint, data)) {
         return;
       }
     } catch (error) {
