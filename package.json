@@ -10,16 +10,6 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.mjs",
       "require": "./dist/index.js"
-    },
-    "./server": {
-      "types": "./dist/server/index.d.ts",
-      "import": "./dist/server/index.mjs",
-      "require": "./dist/server/index.js"
-    },
-    "./client": {
-      "types": "./dist/client/index.d.ts",
-      "import": "./dist/client/index.mjs",
-      "require": "./dist/client/index.js"
     }
   },
   "files": [
@@ -45,17 +35,18 @@
   "author": "Jillen",
   "license": "MIT",
   "peerDependencies": {
-    "react": ">=16.8.0",
-    "next": ">=12.0.0"
+    "next": ">=12.0.0",
+    "react": ">=16.8.0"
   },
   "dependencies": {
-    "isbot": "^5.1.28"
+    "isbot": "^5.1.31",
+    "web-vitals": "^5.1.0"
   },
   "devDependencies": {
-    "@types/node": "^20.19.0",
+    "@types/node": "^20.19.20",
     "@types/react": ">=16.8.0",
     "tsup": "^8.5.0",
-    "typescript": "^5.8.3"
+    "typescript": "^5.9.3"
   },
   "repository": {
     "type": "git",

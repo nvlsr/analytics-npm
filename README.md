@@ -18,18 +18,7 @@ Advanced analytics package for Next.js applications with intelligent bot detecti
 
 **Next.js project** with middleware and app router support
 
-## Installatio
-
-### Environment Variables
-
-Set the required environment variables in your `.env`:
-
-```bash
-NEXT_PUBLIC_ANALYTICS_SERVER_URL=https://analytics.jillen.com
-NEXT_PUBLIC_ANALYTICS_SITE_ID=your-domain.com
-```
-
-**Important**: Both variables use `NEXT_PUBLIC_` prefix for consistent server/client access.
+## Installation
 
 ## Implementation Steps
 

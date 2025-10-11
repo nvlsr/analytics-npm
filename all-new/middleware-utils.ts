@@ -1,6 +1,6 @@
 import type { NextRequest } from 'next/server';
 import { isbot } from 'isbot';
-import { trackBotVisit } from '../analytics-bot-utils';
+import { sendBotVisit } from './send';
 
 /**
  * Combined middleware utility for analytics
@@ -14,11 +14,13 @@ export function setupAnalyticsMiddleware(request: NextRequest) {
   const headers = new Headers(request.headers);
   headers.set('x-pathname', pathname);
   
-  // Track bot visits if this is a bot
+  // Skip bot tracking for API routes to prevent infinite loops
+  const isApiRoute = pathname.startsWith('/api/');
+  
   const userAgent = request.headers.get('user-agent') || '';
   const isVercelBot = /vercel/i.test(userAgent);
-  if (isbot(userAgent) && !isVercelBot) {
-    trackBotVisit(request, pathname);
+  if (!isApiRoute && isbot(userAgent) && !isVercelBot) {
+    sendBotVisit(request);
   }
   
   return {
