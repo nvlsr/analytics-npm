@@ -8,7 +8,17 @@ export default defineConfig({
   dts: true,
   sourcemap: true,
   clean: true,
-  external: ['react', 'next', 'next/server', 'next/navigation'],
+  external: [
+    'react', 
+    'react-dom', 
+    'react/jsx-runtime',
+    'react/jsx-dev-runtime',
+    'next', 
+    'next/server', 
+    'next/navigation',
+    'next/router',
+    'next/head'
+  ],
   splitting: false,
   treeshake: true,
   minify: false,
