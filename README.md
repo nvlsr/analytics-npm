@@ -12,12 +12,22 @@ Advanced analytics package for Next.js applications with intelligent bot detecti
 - 🔒 **Privacy-Focused**: GDPR compliant with DNT (Do Not Track) support
 - 🏎️ **Performance-First**: Lightweight, non-blocking analytics with fire-and-forget tracking
 - 🌍 **Zero-Config**: No environment variables required - works out of the box
+- 🔧 **Next.js 15+ Compatible**: Proper client/server separation prevents build errors
 
 # Analytics Package Integration Guide
 
 ## Prerequisites
 
 **Next.js project** with middleware and app router support
+
+## Important: Client/Server Separation
+
+This package uses separate entry points for client and server code to ensure compatibility with Next.js 15+:
+
+- **Client components**: Import from `@jillen/analytics`
+- **Server utilities**: Import from `@jillen/analytics/server`
+
+This prevents build errors like "usePathname is not exported from 'next/navigation'" in Next.js 15.3.1+.
 
 ## Installation
 
@@ -175,6 +185,11 @@ interface VisitorTrackerProps {
 #### `setupAnalyticsMiddleware(request: NextRequest)`
 Sets up analytics middleware for automatic bot detection and header processing.
 
+**Import from server entry point:**
+```typescript
+import { setupAnalyticsMiddleware } from '@jillen/analytics/server';
+```
+
 ### TypeScript Types
 
 Export types for custom implementations:
@@ -183,3 +198,31 @@ Export types for custom implementations:
 - `PerformanceEventData`
 - `BotEventData`
 - `ServerEnrichedFields`
+
+## Migration from v4.0.14 and Earlier
+
+If upgrading from versions before 4.0.15, update your server imports:
+
+```diff
+// middleware.ts
+- import { setupAnalyticsMiddleware } from '@jillen/analytics';
++ import { setupAnalyticsMiddleware } from '@jillen/analytics/server';
+```
+
+Client component imports remain unchanged:
+```typescript
+// components/analytics-provider.tsx
+import { VisitorTracker } from '@jillen/analytics'; // ✅ No change needed
+```
+
+## Troubleshooting
+
+### Build Errors in Next.js 15+
+
+If you see errors like:
+- "usePathname is not exported from 'next/navigation'"
+- "useRef is not exported from 'react'"
+
+**Solution**: Ensure you're using the correct import paths:
+- Server code: `import { setupAnalyticsMiddleware } from '@jillen/analytics/server'`
+- Client components: `import { VisitorTracker } from '@jillen/analytics'`
