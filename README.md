@@ -1,16 +1,17 @@
 # @jillen/analytics
 
-Advanced analytics package for Next.js applications with intelligent bot detection and comprehensive visitor tracking.
+Advanced analytics package for Next.js applications with intelligent bot detection, comprehensive visitor tracking, and Web Vitals performance monitoring.
 
 ## Features
 
-- 🤖 **Smart Bot Detection**: Advanced bot filtering using multiple detection methods
+- 🤖 **Smart Bot Detection**: Advanced bot filtering using comprehensive bot registry and multiple detection methods
 - 📊 **Comprehensive Tracking**: Detailed visitor analytics with geolocation and device info
+- ⚡ **Web Vitals Monitoring**: Automatic collection of Core Web Vitals (CLS, FID, LCP, FCP, TTFB, INP)
 - 🚀 **Next.js Optimized**: Built specifically for Next.js 13+ with App Router support
 - 📱 **Mobile-First**: Responsive tracking with mobile device detection
 - 🔒 **Privacy-Focused**: GDPR compliant with DNT (Do Not Track) support
-- ⚡ **Performance**: Lightweight, non-blocking analytics with fire-and-forget bot tracking
-- 🌍 **Global Edge**: Vercel Edge Runtime compatible with worldwide deployment
+- 🏎️ **Performance-First**: Lightweight, non-blocking analytics with fire-and-forget tracking
+- 🌍 **Zero-Config**: No environment variables required - works out of the box
 
 # Analytics Package Integration Guide
 
@@ -63,15 +64,46 @@ Create a client component to handle analytics:
 ```typescript
 // components/analytics-provider.tsx
 "use client";
-import { VisitorTracker, type ParsedAnalyticsHeaders } from '@jillen/analytics';
+import { VisitorTracker } from '@jillen/analytics';
+import { useUser } from "@clerk/nextjs"; // or your auth system
 
-interface AnalyticsProviderProps {
-  analyticsData: ParsedAnalyticsHeaders;
-  route: string;
+export function AnalyticsProvider() {
+  const { isLoaded, user } = useUser();
+
+  // Wait for auth to load before initializing analytics
+  if (!isLoaded) {
+    return null;
+  }
+
+  // Use username, fallback to user ID, or null for anonymous
+  const username = user?.username ?? user?.id ?? null;
+
+  return <VisitorTracker username={username} />;
+}
+```
+
+**Alternative auth systems:**
+
+```typescript
+// For NextAuth.js
+import { useSession } from "next-auth/react";
+
+export function AnalyticsProvider() {
+  const { status, data: session } = useSession();
+  
+  if (status === "loading") return null;
+  
+  const username = session?.user?.email ?? session?.user?.id ?? null;
+  return <VisitorTracker username={username} />;
 }
 
-export function AnalyticsProvider({ analyticsData, route }: AnalyticsProviderProps) {
-  return <VisitorTracker {...analyticsData} route={route} />;
+// For Supabase Auth
+import { useUser } from "@supabase/auth-helpers-react";
+
+export function AnalyticsProvider() {
+  const user = useUser();
+  const username = user?.email ?? user?.id ?? null;
+  return <VisitorTracker username={username} />;
 }
 ```
 
@@ -81,25 +113,17 @@ Add analytics tracking to your layout:
 
 ```typescript
 // app/layout.tsx
-import { headers } from "next/headers"; // Add this import if not already present
-import { parseAnalyticsHeaders } from "@jillen/analytics";
 import { AnalyticsProvider } from "@/components/analytics-provider";
 
-export const dynamic = "force-dynamic";
-
-export default async function RootLayout({
+export default function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const headersList = await headers();
-  const pathname = headersList.get("x-pathname") || "/";
-  const analyticsData = parseAnalyticsHeaders(headersList);
-
   return (
     <html lang="en">
       <body>
-        <AnalyticsProvider analyticsData={analyticsData} route={pathname} />
+        <AnalyticsProvider />
         {children}
       </body>
     </html>
@@ -109,4 +133,53 @@ export default async function RootLayout({
 
 ### Step 5: Deploy
 
-Deploy to production. Analytics automatically activates based on environment detection.
+Deploy to production. Analytics automatically:
+- ✅ **Detects bots** and tracks them separately
+- ✅ **Collects Web Vitals** performance metrics
+- ✅ **Tracks user sessions** and page views
+- ✅ **Works in production only** (disabled in development)
+
+## What Gets Tracked
+
+### 📊 **User Analytics**
+- Page views and session tracking
+- User identification (if username provided)
+- Device info (screen resolution, viewport, mobile detection)
+- Geographic data (via Vercel headers)
+- Referrer information
+
+### ⚡ **Performance Metrics**
+- **Core Web Vitals**: CLS, LCP, FID/INP
+- **Loading Metrics**: FCP, TTFB
+- **Resource Performance**: Automatic classification and timing
+- **User Experience**: Real user monitoring data
+
+### 🤖 **Bot Detection**
+- Comprehensive bot registry (search engines, social crawlers, monitoring tools)
+- Separate tracking pipeline for bot visits
+- Protection against analytics pollution
+
+## API Reference
+
+### Components
+
+#### `VisitorTracker`
+```typescript
+interface VisitorTrackerProps {
+  username?: string | null; // Optional user identifier
+}
+```
+
+### Server Functions
+
+#### `setupAnalyticsMiddleware(request: NextRequest)`
+Sets up analytics middleware for automatic bot detection and header processing.
+
+### TypeScript Types
+
+Export types for custom implementations:
+- `BaseEventData`
+- `HumanEventData` 
+- `PerformanceEventData`
+- `BotEventData`
+- `ServerEnrichedFields`
