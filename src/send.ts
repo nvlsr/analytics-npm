@@ -1,8 +1,7 @@
 import type { NextRequest } from 'next/server';
 import { extractBotInfo } from './bot-registry';
-import type { BotEventData, HumanEventData, PerformanceEventData } from './events';
+import type { BotEvent as BotEventData, BaseHumanEvent as HumanEventData, PerformanceEvent as PerformanceEventData } from './event-types';
 import { getSiteIdWithFallback } from './analytics-host-utils';
-import { sdkVersion } from './version';
 
 interface SendOptions {
   useBeacon?: boolean;
@@ -18,14 +17,14 @@ export async function sendHumanEvent(
   options: SendOptions = {}
 ): Promise<void> {
   const endpoint = "https://analytics.jillen.com/api/log/data";
-  const payloadWithVersion = { ...payload, sdkVersion };
-  const data = JSON.stringify(payloadWithVersion);
+  const data = JSON.stringify(payload);
   
   // Try Beacon API first (unless explicitly disabled)
   if (!options.forceFetch && typeof navigator !== 'undefined' && navigator.sendBeacon) {
     try {
-      // Send string payload to avoid non-simple CORS headers that trigger a preflight
-      if (navigator.sendBeacon(endpoint, data)) {
+      const blob = new Blob([data], { type: 'application/json' });
+      
+      if (navigator.sendBeacon(endpoint, blob)) {
         return;
       }
     } catch (error) {
@@ -69,13 +68,13 @@ export async function sendPerformanceEvent(
   options: SendOptions = {}
 ): Promise<void> {
   const endpoint = "https://analytics.jillen.com/api/log/metrics";
-  const payloadWithVersion = { ...payload, sdkVersion };
-  const data = JSON.stringify(payloadWithVersion);
+  const data = JSON.stringify(payload);
   
   // Try Beacon API first (unless explicitly disabled)
   if (!options.forceFetch && typeof navigator !== 'undefined' && navigator.sendBeacon) {
     try {
-      if (navigator.sendBeacon(endpoint, data)) {
+      const blob = new Blob([data], { type: 'application/json' });
+      if (navigator.sendBeacon(endpoint, blob)) {
         return;
       }
     } catch (error) {
@@ -112,8 +111,6 @@ export async function sendPerformanceEvent(
 }
 
 export async function sendBotEvent(payload: BotEventData): Promise<void> {
-  const payloadWithVersion = { ...payload, sdkVersion };
-
   try {
     const response = await fetch("https://analytics.jillen.com/api/log/ping", {
       method: "POST",
@@ -121,7 +118,7 @@ export async function sendBotEvent(payload: BotEventData): Promise<void> {
         "Content-Type": "application/json",
       },
       mode: 'cors',
-      body: JSON.stringify(payloadWithVersion),
+      body: JSON.stringify(payload),
     });
 
     if (!response.ok) {
@@ -154,7 +151,7 @@ export function sendBotVisit(request: NextRequest): void {
       const botInfo = extractBotInfo(userAgent);
       const botPayload: BotEventData = {
         website_domain,
-        userAgent,
+        user_agent: userAgent,
         bot_name: botInfo.name,
         bot_category: botInfo.category,
         timestamp: new Date().toISOString(),
