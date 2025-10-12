@@ -4,11 +4,9 @@ import { useEffect, useRef, useCallback } from "react";
 import { usePathname } from "next/navigation";
 import { isbot } from "isbot";
 import { getSiteIdWithFallback } from "./analytics-host-utils";
-import { HumanEventData, PerformanceEventData } from "./events";
+import type { BaseHumanEvent, PerformanceEvent } from "./event-types";
 import { AnalyticsStorage, AnalyticsSessionStorage } from "./storage-utils";
-import {
-  collectPerfMetrics,
-} from "./performance-collector";
+import { collectPerfMetrics } from "./performance-collector";
 import { sendHumanEvent, sendPerformanceEvent } from "./send";
 
 interface SessionData {
@@ -240,7 +238,7 @@ export function VisitorTracker({ username }: VisitorTrackerProps) {
           return;
         }
 
-        const payload: PerformanceEventData = {
+        const payload: PerformanceEvent = {
           ...perfMetrics,
           website_domain: siteId,
           visitor_id: visitorId,
@@ -273,7 +271,7 @@ export function VisitorTracker({ username }: VisitorTrackerProps) {
         const visitorId = generateVisitorId(username);
         const { sessionId } = generateSessionId();
 
-        const payload: HumanEventData = {
+        const payload: BaseHumanEvent = {
           website_domain: siteId,
           path: pathname,
           visitor_id: visitorId,
@@ -388,13 +386,10 @@ export function VisitorTracker({ username }: VisitorTrackerProps) {
       if (throttleRef.current.timeoutId) {
         clearTimeout(throttleRef.current.timeoutId);
       }
-      throttleRef.current.timeoutId = setTimeout(
-        () => {
-          handleActivity();
-          throttleRef.current.lastExecTime = Date.now();
-        },
-        delay - (currentTime - throttleRef.current.lastExecTime)
-      );
+      throttleRef.current.timeoutId = setTimeout(() => {
+        handleActivity();
+        throttleRef.current.lastExecTime = Date.now();
+      }, delay - (currentTime - throttleRef.current.lastExecTime));
     }
   }, [handleActivity]);
 
@@ -500,7 +495,7 @@ export function VisitorTracker({ username }: VisitorTrackerProps) {
         }
       };
     }
-    
+
     // Return undefined when window is not available (SSR)
     return undefined;
     // eslint-disable-next-line react-hooks/exhaustive-deps
