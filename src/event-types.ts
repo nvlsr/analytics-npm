@@ -123,10 +123,10 @@ export interface PerformanceEvent {
   // Navigation timing
   dns_lookup?: number;
   tcp_connect?: number;
-  ttfb: number; // Time to First Byte (ms)
-  html_response: number;
-  frontend_render: number;
-  total_page_load: number;
+  ttfb?: number; // Time to First Byte (ms)
+  html_response?: number;
+  frontend_render?: number;
+  total_page_load?: number;
   
   // Resource loading
   num_requests: number;

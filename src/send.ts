@@ -1,6 +1,6 @@
 import type { NextRequest } from 'next/server';
 import { extractBotInfo } from './bot-registry';
-import type { BotEvent as BotEventData, BaseHumanEvent as HumanEventData, PerformanceEvent as PerformanceEventData } from './event-types';
+import type { BotEvent, BaseHumanEvent, PerformanceEvent } from './event-types';
 import { getSiteIdWithFallback } from './analytics-host-utils';
 import { sdk_version } from './version';
 
@@ -14,11 +14,11 @@ interface SendOptions {
  * Beacon API: Guaranteed delivery, even on page unload
  */
 export async function sendHumanEvent(
-  payload: HumanEventData, 
+  payload: BaseHumanEvent, 
   options: SendOptions = {}
 ): Promise<void> {
   const endpoint = "https://analytics.jillen.com/api/log/data";
-  const payloadWithVersion: HumanEventData = {
+  const payloadWithVersion: BaseHumanEvent = {
     ...payload,
     sdk_version,
   };
@@ -69,11 +69,11 @@ export async function sendHumanEvent(
  * Send performance metrics using Beacon API with fetch fallback
  */
 export async function sendPerformanceEvent(
-  payload: PerformanceEventData,
+  payload: PerformanceEvent,
   options: SendOptions = {}
 ): Promise<void> {
   const endpoint = "https://analytics.jillen.com/api/log/metrics";
-  const payloadWithVersion: PerformanceEventData = {
+  const payloadWithVersion: PerformanceEvent = {
     ...payload,
     sdk_version,
   };
@@ -123,8 +123,8 @@ export async function sendPerformanceEvent(
  * Internal function to send bot tracking events
  * Used only by sendBotVisit within this module
  */
-async function sendBotEvent(payload: BotEventData): Promise<void> {
-  const payloadWithVersion: BotEventData = {
+async function sendBotEvent(payload: BotEvent): Promise<void> {
+  const payloadWithVersion: BotEvent = {
     ...payload,
     sdk_version,
   };
@@ -166,7 +166,7 @@ export function sendBotVisit(request: NextRequest): void {
 
       // Process bot data and create payload
       const botInfo = extractBotInfo(userAgent);
-      const botPayload: BotEventData = {
+      const botPayload: BotEvent = {
         website_domain,
         user_agent: userAgent,
         bot_name: botInfo.name,

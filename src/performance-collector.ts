@@ -5,10 +5,10 @@ export interface FlattenedPageMetrics {
   page: string;
   dns_lookup?: number;
   tcp_connect?: number;
-  ttfb: number;
-  html_response: number;
-  frontend_render: number;
-  total_page_load: number;
+  ttfb?: number;
+  html_response?: number;
+  frontend_render?: number;
+  total_page_load?: number;
   lcp?: number;
   cls?: number;
   inp?: number;
@@ -334,15 +334,30 @@ export function collectPerfMetrics(): FlattenedPageMetrics | null {
     ? Math.round(navigation.domainLookupEnd - navigation.domainLookupStart) : undefined;
   const tcpConnect = navigation.connectEnd > 0 && navigation.connectStart > 0
     ? Math.round(navigation.connectEnd - navigation.connectStart) : undefined;
-  const ttfb = Math.round(navigation.responseStart - navigation.requestStart);
-  const htmlResponse = Math.round(navigation.responseEnd - navigation.responseStart);
-  const totalPageLoad = Math.round(navigation.loadEventEnd - navigation.fetchStart);
-
-  let frontendRender = Math.round(navigation.loadEventEnd - navigation.responseStart);
-  const maxFrontendRender = totalPageLoad - ttfb - htmlResponse;
-  if (frontendRender > maxFrontendRender) {
-    frontendRender = Math.max(0, maxFrontendRender);
+  
+  // Calculate timing values, only include them if valid
+  const rawTtfb = navigation.responseStart - navigation.requestStart;
+  const rawHtmlResponse = navigation.responseEnd - navigation.responseStart;
+  const rawTotalPageLoad = navigation.loadEventEnd - navigation.fetchStart;
+  const rawFrontendRender = navigation.loadEventEnd - navigation.responseStart;
+  
+  // Only include timing values if they're valid (positive)
+  const ttfb = rawTtfb >= 0 ? Math.round(rawTtfb) : undefined;
+  const htmlResponse = rawHtmlResponse >= 0 ? Math.round(rawHtmlResponse) : undefined;
+  const totalPageLoad = rawTotalPageLoad >= 0 ? Math.round(rawTotalPageLoad) : undefined;
+  
+  let frontendRender: number | undefined;
+  if (rawFrontendRender >= 0) {
+    frontendRender = Math.round(rawFrontendRender);
+    // Validate frontend render against other timing values if available
+    if (ttfb !== undefined && htmlResponse !== undefined && totalPageLoad !== undefined) {
+      const maxFrontendRender = totalPageLoad - ttfb - htmlResponse;
+      if (frontendRender > maxFrontendRender) {
+        frontendRender = Math.max(0, maxFrontendRender);
+      }
+    }
   }
+  
 
   const asyncResources = resources.filter(r => r.startTime > navigation.loadEventEnd);
 
