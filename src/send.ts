@@ -27,7 +27,7 @@ export async function sendHumanEvent(
   // Try Beacon API first (unless explicitly disabled)
   if (!options.forceFetch && typeof navigator !== 'undefined' && navigator.sendBeacon) {
     try {
-      const blob = new Blob([data], { type: 'application/json' });
+      const blob = new Blob([data], { type: 'text/plain;charset=UTF-8' });
       
       if (navigator.sendBeacon(endpoint, blob)) {
         return;
@@ -41,11 +41,9 @@ export async function sendHumanEvent(
   try {
     const response = await fetch(endpoint, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
       body: data,
       keepalive: true, // Attempts to complete even if page unloads
+      credentials: 'omit',
     });
 
     if (!response.ok) {
@@ -82,7 +80,7 @@ export async function sendPerformanceEvent(
   // Try Beacon API first (unless explicitly disabled)
   if (!options.forceFetch && typeof navigator !== 'undefined' && navigator.sendBeacon) {
     try {
-      const blob = new Blob([data], { type: 'application/json' });
+      const blob = new Blob([data], { type: 'text/plain;charset=UTF-8' });
       if (navigator.sendBeacon(endpoint, blob)) {
         return;
       }
@@ -95,11 +93,9 @@ export async function sendPerformanceEvent(
   try {
     const response = await fetch(endpoint, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
       body: data,
       keepalive: true,
+      credentials: 'omit',
     });
 
     if (!response.ok) {
