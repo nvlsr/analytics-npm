@@ -17,7 +17,7 @@ export async function sendHumanEvent(
   payload: BaseHumanEvent, 
   options: SendOptions = {}
 ): Promise<void> {
-  const endpoint = "https://analytics.jillen.com/api/log/data";
+  const endpoint = "https://analytics.jillen.com/api/hbound";
   const payloadWithVersion: BaseHumanEvent = {
     ...payload,
     sdk_version,
@@ -70,7 +70,7 @@ export async function sendPerformanceEvent(
   payload: PerformanceEvent,
   options: SendOptions = {}
 ): Promise<void> {
-  const endpoint = "https://analytics.jillen.com/api/log/metrics";
+  const endpoint = "https://analytics.jillen.com/api/pbound";
   const payloadWithVersion: PerformanceEvent = {
     ...payload,
     sdk_version,
@@ -125,7 +125,7 @@ async function sendBotEvent(payload: BotEvent): Promise<void> {
     sdk_version,
   };
   try {
-    const response = await fetch("https://analytics.jillen.com/api/log/ping", {
+    const response = await fetch("https://analytics.jillen.com/api/bbound", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
