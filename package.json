@@ -1,6 +1,6 @@
 {
   "name": "@jillen/analytics",
-  "version": "4.0.30",
+  "version": "4.0.31",
   "description": "Advanced analytics package for Next.js applications with bot detection and comprehensive tracking",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
@@ -40,8 +40,8 @@
   "author": "Jillen",
   "license": "MIT",
   "peerDependencies": {
-    "next": "^15.3.3",
-    "react": "^19.1.0"
+    "next": ">=13.0.0",
+    "react": ">=18.0.0"
   },
   "dependencies": {
     "isbot": "^5.1.31",
