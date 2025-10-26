@@ -98,13 +98,22 @@ function calculatePerformanceGrade(m: {
   return 'poor';
 }
 
-function calculateAsyncWindow(resources: PerformanceResourceTiming[], loadEventEnd: number) {
-  if (resources.length === 0) {
+function calculateAsyncWindow(
+  resources: PerformanceResourceTiming[], 
+  loadEventEnd: number,
+  maxWindowMs: number = 60000 // Default to 60 seconds for page-scoped analytics
+) {
+  // Filter resources to only those within the specified time window after page load
+  const pageResources = resources.filter(r => 
+    r.startTime <= loadEventEnd + maxWindowMs
+  );
+  
+  if (pageResources.length === 0) {
     return { start: undefined, end: undefined, duration: undefined, window: undefined };
   }
   
-  const start = Math.round(resources[0].startTime - loadEventEnd);
-  const end = Math.round(Math.max(...resources.map(r => r.responseEnd)) - loadEventEnd);
+  const start = Math.round(pageResources[0].startTime - loadEventEnd);
+  const end = Math.round(Math.max(...pageResources.map(r => r.responseEnd)) - loadEventEnd);
   const window = end - start;
   
   return { start, end, duration: end, window };
@@ -361,8 +370,8 @@ export function collectPerfMetrics(): FlattenedPageMetrics | null {
 
   const asyncResources = resources.filter(r => r.startTime > navigation.loadEventEnd);
 
-  // Calculate async timeline using utility function
-  const asyncTiming = calculateAsyncWindow(asyncResources, navigation.loadEventEnd);
+  // Calculate async timeline using utility function with 60-second page scope
+  const asyncTiming = calculateAsyncWindow(asyncResources, navigation.loadEventEnd, 60000);
   const asyncTimelineStart = asyncTiming.start;
   const asyncTimelineEnd = asyncTiming.end;
   const asyncTimelineWindow = asyncTiming.window;
@@ -370,12 +379,14 @@ export function collectPerfMetrics(): FlattenedPageMetrics | null {
   // Build enhanced resource map with separate initial/dynamic tracking
   const resourceMap: Record<string, EnhancedResourceData> = {};
 
-  // Separate API calls from other async resources
+  // Separate API calls from other async resources (within 60-second window)
   const asyncApiResources = asyncResources.filter(r => 
-    r.initiatorType === 'fetch' || r.initiatorType === 'xmlhttprequest'
+    (r.initiatorType === 'fetch' || r.initiatorType === 'xmlhttprequest') &&
+    r.startTime <= navigation.loadEventEnd + 60000
   );
   const asyncNonApiResources = asyncResources.filter(r => 
-    r.initiatorType !== 'fetch' && r.initiatorType !== 'xmlhttprequest'
+    r.initiatorType !== 'fetch' && r.initiatorType !== 'xmlhttprequest' &&
+    r.startTime <= navigation.loadEventEnd + 60000
   );
 
   // Compute async API details
@@ -409,7 +420,7 @@ export function collectPerfMetrics(): FlattenedPageMetrics | null {
   }
 
   const asyncApiCount = asyncApiResources.length;
-  const apiTiming = calculateAsyncWindow(asyncApiResources, navigation.loadEventEnd);
+  const apiTiming = calculateAsyncWindow(asyncApiResources, navigation.loadEventEnd, 60000);
   const asyncApiEnd = apiTiming.duration;
 
   // Calculate API parallelism efficiency
@@ -466,6 +477,11 @@ export function collectPerfMetrics(): FlattenedPageMetrics | null {
     const duration = Math.round(r.responseEnd - r.startTime);
     const timeSinceLoad = Math.round(r.startTime - navigation.loadEventEnd);
     const key = url;
+    
+    // Skip resources that fall outside our page-scoped window (after 60 seconds)
+    if (r.startTime > navigation.loadEventEnd + 60000) {
+      continue;
+    }
     
     // Determine if this specific request is during initial load or dynamic
     const isInitialRequest = r.startTime <= navigation.loadEventEnd + 1000; // 1s buffer for initial phase
