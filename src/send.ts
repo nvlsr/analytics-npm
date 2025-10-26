@@ -1,22 +1,14 @@
+
 import type { NextRequest } from 'next/server';
 import { extractBotInfo } from './bot-registry';
 import type { BotEvent, BaseHumanEvent, PerformanceEvent } from './event-types';
 import { getSiteIdWithFallback } from './analytics-host-utils';
 import { sdk_version } from './version';
 
-interface SendOptions {
-  useBeacon?: boolean;
-  forceFetch?: boolean;
-}
-
 /**
- * Send analytics event using Beacon API with fetch fallback
- * Beacon API: Guaranteed delivery, even on page unload
+ * Send analytics event using standard fetch with timeout
  */
-export async function sendHumanEvent(
-  payload: BaseHumanEvent, 
-  options: SendOptions = {}
-): Promise<void> {
+export async function sendHumanEvent(payload: BaseHumanEvent): Promise<void> {
   const endpoint = "https://analytics.jillen.com/api/human";
   const payloadWithVersion: BaseHumanEvent = {
     ...payload,
@@ -24,27 +16,21 @@ export async function sendHumanEvent(
   };
   const data = JSON.stringify(payloadWithVersion);
   
-  // Try Beacon API first (unless explicitly disabled)
-  if (!options.forceFetch && typeof navigator !== 'undefined' && navigator.sendBeacon) {
-    try {
-      const blob = new Blob([data], { type: 'text/plain;charset=UTF-8' });
-      
-      if (navigator.sendBeacon(endpoint, blob)) {
-        return;
-      }
-    } catch (error) {
-      console.debug('[Analytics] Beacon API failed:', error);
-    }
-  }
-  
-  // Fallback to fetch with keepalive
   try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
+
     const response = await fetch(endpoint, {
       method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      mode: "cors",
       body: data,
-      keepalive: true, // Attempts to complete even if page unloads
-      credentials: 'omit',
+      signal: controller.signal,
     });
+
+    clearTimeout(timeoutId);
 
     if (!response.ok) {
       console.error(`[Analytics] Server endpoint error: ${response.status} ${response.statusText} - human event failed`);
@@ -52,9 +38,15 @@ export async function sendHumanEvent(
     }
   } catch (error) {
     if (error instanceof TypeError) {
-      console.error("[Analytics] Configuration error in human event:", error.message);
+      if (error.message.includes("fetch failed") || error.message.includes("network")) {
+        console.error("[Analytics] Network connectivity error in human event:", error.message);
+      } else {
+        console.error("[Analytics] Request configuration error in human event:", error.message);
+      }
+    } else if (error instanceof DOMException && error.name === "AbortError") {
+      console.error("[Analytics] Human event request timeout after 10 seconds");
     } else if (error instanceof Error) {
-      console.error("[Analytics] Error in human event:", error.message);
+      console.error("[Analytics] Human event error:", error.name, error.message);
     } else {
       console.error("[Analytics] Unknown error in human event:", error);
     }
@@ -64,12 +56,9 @@ export async function sendHumanEvent(
 }
 
 /**
- * Send performance metrics using Beacon API with fetch fallback
+ * Send performance metrics using standard fetch with timeout
  */
-export async function sendPerformanceEvent(
-  payload: PerformanceEvent,
-  options: SendOptions = {}
-): Promise<void> {
+export async function sendPerformanceEvent(payload: PerformanceEvent): Promise<void> {
   const endpoint = "https://analytics.jillen.com/api/perf";
   const payloadWithVersion: PerformanceEvent = {
     ...payload,
@@ -77,26 +66,21 @@ export async function sendPerformanceEvent(
   };
   const data = JSON.stringify(payloadWithVersion);
   
-  // Try Beacon API first (unless explicitly disabled)
-  if (!options.forceFetch && typeof navigator !== 'undefined' && navigator.sendBeacon) {
-    try {
-      const blob = new Blob([data], { type: 'text/plain;charset=UTF-8' });
-      if (navigator.sendBeacon(endpoint, blob)) {
-        return;
-      }
-    } catch (error) {
-      console.debug('[Performance] Beacon API failed:', error);
-    }
-  }
-  
-  // Fallback to fetch with keepalive
   try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
+
     const response = await fetch(endpoint, {
       method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      mode: "cors",
       body: data,
-      keepalive: true,
-      credentials: 'omit',
+      signal: controller.signal,
     });
+
+    clearTimeout(timeoutId);
 
     if (!response.ok) {
       console.error(`[Performance] Server endpoint error: ${response.status} ${response.statusText} - performance event failed`);
@@ -104,9 +88,15 @@ export async function sendPerformanceEvent(
     }
   } catch (error) {
     if (error instanceof TypeError) {
-      console.error("[Performance] Configuration error in performance event:", error.message);
+      if (error.message.includes("fetch failed") || error.message.includes("network")) {
+        console.error("[Performance] Network connectivity error in performance event:", error.message);
+      } else {
+        console.error("[Performance] Request configuration error in performance event:", error.message);
+      }
+    } else if (error instanceof DOMException && error.name === "AbortError") {
+      console.error("[Performance] Performance event request timeout after 10 seconds");
     } else if (error instanceof Error) {
-      console.error("[Performance] Error in performance event:", error.message);
+      console.error("[Performance] Performance event error:", error.name, error.message);
     } else {
       console.error("[Performance] Unknown error in performance event:", error);
     }
@@ -116,7 +106,7 @@ export async function sendPerformanceEvent(
 }
 
 /**
- * Internal function to send bot tracking events
+ * Internal function to send bot tracking events using standard fetch with timeout
  * Used only by sendBotVisit within this module
  */
 async function sendBotEvent(payload: BotEvent): Promise<void> {
@@ -124,7 +114,11 @@ async function sendBotEvent(payload: BotEvent): Promise<void> {
     ...payload,
     sdk_version,
   };
+  
   try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
+
     const response = await fetch("https://analytics.jillen.com/api/bot", {
       method: "POST",
       headers: {
@@ -132,7 +126,10 @@ async function sendBotEvent(payload: BotEvent): Promise<void> {
       },
       mode: 'cors',
       body: JSON.stringify(payloadWithVersion),
+      signal: controller.signal,
     });
+
+    clearTimeout(timeoutId);
 
     if (!response.ok) {
       console.error(`[Jillen.Analytics] Server endpoint error: ${response.status} ${response.statusText} - bot tracking failed`);
@@ -141,9 +138,15 @@ async function sendBotEvent(payload: BotEvent): Promise<void> {
   } catch (error) {
     // Log specific error types for debugging
     if (error instanceof TypeError) {
-      console.error("[Jillen.Analytics] Configuration error in bot tracking:", error.message);
+      if (error.message.includes("fetch failed") || error.message.includes("network")) {
+        console.error("[Jillen.Analytics] Network connectivity error in bot tracking:", error.message);
+      } else {
+        console.error("[Jillen.Analytics] Request configuration error in bot tracking:", error.message);
+      }
+    } else if (error instanceof DOMException && error.name === "AbortError") {
+      console.error("[Jillen.Analytics] Bot tracking request timeout after 10 seconds");
     } else if (error instanceof Error) {
-      console.error("[Jillen.Analytics] Error in bot tracking:", error.message);
+      console.error("[Jillen.Analytics] Bot tracking error:", error.name, error.message);
     } else {
       console.error("[Jillen.Analytics] Unknown error in bot tracking:", error);
     }
