@@ -1,21 +1,17 @@
-import { defineConfig } from 'tsup'
+import { defineConfig, type Format } from 'tsup'
+import { readFileSync, writeFileSync } from 'fs'
 
-export default defineConfig({
-  entry: {
-    index: 'src/index.ts',
-    server: 'src/server.ts',
-  },
-  format: ['cjs', 'esm'],
+const commonConfig = {
+  format: ['cjs', 'esm'] as Format[],
   dts: true,
   sourcemap: true,
-  clean: true,
   external: [
-    'react', 
-    'react-dom', 
+    'react',
+    'react-dom',
     'react/jsx-runtime',
     'react/jsx-dev-runtime',
-    'next', 
-    'next/server', 
+    'next',
+    'next/server',
     'next/navigation',
     'next/router',
     'next/head'
@@ -25,10 +21,39 @@ export default defineConfig({
   minify: false,
   target: 'es2020',
   outDir: 'dist',
-  banner: {
-    js: '"use client";'
+}
+
+function injectUseClient() {
+  const files = ['dist/index.js', 'dist/index.mjs']
+  files.forEach(file => {
+    try {
+      const content = readFileSync(file, 'utf8')
+      if (!content.startsWith('"use client"') && !content.startsWith("'use client'")) {
+        writeFileSync(file, `"use client";\n${content}`)
+        console.log(`✓ Injected "use client" into ${file}`)
+      }
+    } catch (e) {
+      console.log(`⚠ Could not inject into ${file}:`, e.message)
+    }
+  })
+}
+
+export default defineConfig([
+  {
+    ...commonConfig,
+    entry: { index: 'src/index.ts' },
+    clean: true,
+    onSuccess: async () => {
+      console.log('Client bundle built successfully!')
+      injectUseClient()
+    },
   },
-  onSuccess: async () => {
-    console.log('Build completed successfully!')
-  },
-}) 
+  {
+    ...commonConfig,
+    entry: { server: 'src/server.ts' },
+    clean: false,
+    onSuccess: async () => {
+      console.log('Server bundle built successfully!')
+    },
+  }
+]) 

@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useCallback } from "react";
-import { usePathname } from "next/navigation";
 import { isbot } from "isbot";
-import { getSiteIdWithFallback } from "./analytics-host-utils";
+import { usePathname } from "next/navigation";
+import { useCallback, useEffect, useRef } from "react";
 import type { BaseHumanEvent, PerformanceEvent } from "./event-types";
-import { AnalyticsStorage, AnalyticsSessionStorage } from "./storage-utils";
+import { getSiteIdWithFallback } from "./analytics-host-utils";
 import { collectPerfMetrics } from "./performance-collector";
 import { sendHumanEvent, sendPerformanceEvent } from "./send";
+import { AnalyticsSessionStorage, AnalyticsStorage } from "./storage-utils";
 
 interface SessionData {
   session_id: string;
@@ -42,7 +42,7 @@ function generateVisitorId(username?: string | null): string {
   const fingerprint = [
     navigator.userAgent || "unknown",
     navigator.language || "unknown",
-    screen.width + "x" + screen.height,
+    `${screen.width}x${screen.height}`,
     (navigator as Navigator & { hardwareConcurrency?: number })
       .hardwareConcurrency || "unknown",
     Intl.DateTimeFormat().resolvedOptions().timeZone || "unknown",
@@ -196,6 +196,10 @@ export function VisitorTracker({ username }: VisitorTrackerProps) {
   // Track if we've already sent performance event for this page load
   const perfEventSent = useRef<boolean>(false);
 
+  // Deduplication cache to prevent burst requests
+  const sentEventsCache = useRef<Map<string, number>>(new Map());
+  const DEDUPE_WINDOW_MS = 100; // 100ms deduplication window
+
   const isBot = useCallback(() => {
     if (typeof navigator !== "undefined" && isbot(navigator.userAgent)) {
       return true;
@@ -260,16 +264,37 @@ export function VisitorTracker({ username }: VisitorTrackerProps) {
         return;
       }
 
+      // Deduplication: Check if same event was sent recently
+      const siteId = getSiteIdWithFallback(window.location.hostname);
+      const { sessionId } = generateSessionId();
+      const dedupeKey = `${sessionId}_${eventType}_${pathname}`;
+      const now = Date.now();
+      const lastSent = sentEventsCache.current.get(dedupeKey);
+
+      if (lastSent && now - lastSent < DEDUPE_WINDOW_MS) {
+        // Skip duplicate event within deduplication window
+        return;
+      }
+
+      // Update cache with current timestamp
+      sentEventsCache.current.set(dedupeKey, now);
+
+      // Cleanup old entries to prevent memory leak (keep cache size bounded)
+      if (sentEventsCache.current.size > 50) {
+        const oldestKey = sentEventsCache.current.keys().next().value;
+        if (oldestKey) {
+          sentEventsCache.current.delete(oldestKey);
+        }
+      }
+
       // Send performance data on pageview events (production only)
       if (eventType === "pageview") {
         sendPerfEvent();
       }
 
       try {
-        const siteId = getSiteIdWithFallback(window.location.hostname);
         const clientData = getClientData(username);
         const visitorId = generateVisitorId(username);
-        const { sessionId } = generateSessionId();
 
         const payload: BaseHumanEvent = {
           website_domain: siteId,
@@ -500,8 +525,13 @@ export function VisitorTracker({ username }: VisitorTrackerProps) {
     return undefined;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
-    pathname, // Only re-run when path changes
-    username, // Only re-run when user changes
+    pathname,
+    username,
+    isBot, // Start the dynamic heartbeat system
+    scheduleNextHeartbeat,
+    sendEvent,
+    throttledHandleActivity,
+    updateLastActivity,
   ]);
 
   return null;
