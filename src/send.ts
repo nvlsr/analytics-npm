@@ -17,7 +17,7 @@ export async function sendHumanEvent(payload: BaseHumanEvent): Promise<void> {
 
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000);
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
 
     const response = await fetch(endpoint, {
       method: "POST",
@@ -45,7 +45,7 @@ export async function sendHumanEvent(payload: BaseHumanEvent): Promise<void> {
         console.error("[Analytics] Request configuration error in human event:", error.message);
       }
     } else if (error instanceof DOMException && error.name === "AbortError") {
-      console.error("[Analytics] Human event request timeout after 10 seconds");
+      console.error("[Analytics] Human event request timeout after 30 seconds");
     } else if (error instanceof Error) {
       console.error("[Analytics] Human event error:", error.name, error.message);
     } else {
@@ -69,7 +69,7 @@ export async function sendPerformanceEvent(payload: PerformanceEvent): Promise<v
 
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000);
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
 
     const response = await fetch(endpoint, {
       method: "POST",
@@ -103,7 +103,7 @@ export async function sendPerformanceEvent(payload: PerformanceEvent): Promise<v
         );
       }
     } else if (error instanceof DOMException && error.name === "AbortError") {
-      console.error("[Performance] Performance event request timeout after 10 seconds");
+      console.error("[Performance] Performance event request timeout after 30 seconds");
     } else if (error instanceof Error) {
       console.error("[Performance] Performance event error:", error.name, error.message);
     } else {
@@ -126,7 +126,7 @@ async function sendBotEvent(payload: BotEvent): Promise<void> {
 
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000);
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
 
     const response = await fetch("https://analytics.jillen.com/api/bot", {
       method: "POST",
@@ -162,7 +162,7 @@ async function sendBotEvent(payload: BotEvent): Promise<void> {
         );
       }
     } else if (error instanceof DOMException && error.name === "AbortError") {
-      console.error("[Jillen.Analytics] Bot tracking request timeout after 10 seconds");
+      console.error("[Jillen.Analytics] Bot tracking request timeout after 30 seconds");
     } else if (error instanceof Error) {
       console.error("[Jillen.Analytics] Bot tracking error:", error.name, error.message);
     } else {
