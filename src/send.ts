@@ -1,9 +1,8 @@
-
-import type { NextRequest } from 'next/server';
-import { extractBotInfo } from './bot-registry';
-import type { BotEvent, BaseHumanEvent, PerformanceEvent } from './event-types';
-import { getSiteIdWithFallback } from './analytics-host-utils';
-import { sdk_version } from './version';
+import type { NextRequest } from "next/server";
+import type { BaseHumanEvent, BotEvent, PerformanceEvent } from "./event-types";
+import { getSiteIdWithFallback } from "./analytics-host-utils";
+import { extractBotInfo } from "./bot-registry";
+import { sdk_version } from "./version";
 
 /**
  * Send analytics event using standard fetch with timeout
@@ -15,7 +14,7 @@ export async function sendHumanEvent(payload: BaseHumanEvent): Promise<void> {
     sdk_version,
   };
   const data = JSON.stringify(payloadWithVersion);
-  
+
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 10000);
@@ -33,7 +32,9 @@ export async function sendHumanEvent(payload: BaseHumanEvent): Promise<void> {
     clearTimeout(timeoutId);
 
     if (!response.ok) {
-      console.error(`[Analytics] Server endpoint error: ${response.status} ${response.statusText} - human event failed`);
+      console.error(
+        `[Analytics] Server endpoint error: ${response.status} ${response.statusText} - human event failed`
+      );
       return;
     }
   } catch (error) {
@@ -65,7 +66,7 @@ export async function sendPerformanceEvent(payload: PerformanceEvent): Promise<v
     sdk_version,
   };
   const data = JSON.stringify(payloadWithVersion);
-  
+
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 10000);
@@ -83,15 +84,23 @@ export async function sendPerformanceEvent(payload: PerformanceEvent): Promise<v
     clearTimeout(timeoutId);
 
     if (!response.ok) {
-      console.error(`[Performance] Server endpoint error: ${response.status} ${response.statusText} - performance event failed`);
+      console.error(
+        `[Performance] Server endpoint error: ${response.status} ${response.statusText} - performance event failed`
+      );
       return;
     }
   } catch (error) {
     if (error instanceof TypeError) {
       if (error.message.includes("fetch failed") || error.message.includes("network")) {
-        console.error("[Performance] Network connectivity error in performance event:", error.message);
+        console.error(
+          "[Performance] Network connectivity error in performance event:",
+          error.message
+        );
       } else {
-        console.error("[Performance] Request configuration error in performance event:", error.message);
+        console.error(
+          "[Performance] Request configuration error in performance event:",
+          error.message
+        );
       }
     } else if (error instanceof DOMException && error.name === "AbortError") {
       console.error("[Performance] Performance event request timeout after 10 seconds");
@@ -114,7 +123,7 @@ async function sendBotEvent(payload: BotEvent): Promise<void> {
     ...payload,
     sdk_version,
   };
-  
+
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 10000);
@@ -123,8 +132,9 @@ async function sendBotEvent(payload: BotEvent): Promise<void> {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        "User-Agent": "Jillen-Analytics-SDK/1.0",
       },
-      mode: 'cors',
+      mode: "cors",
       body: JSON.stringify(payloadWithVersion),
       signal: controller.signal,
     });
@@ -132,16 +142,24 @@ async function sendBotEvent(payload: BotEvent): Promise<void> {
     clearTimeout(timeoutId);
 
     if (!response.ok) {
-      console.error(`[Jillen.Analytics] Server endpoint error: ${response.status} ${response.statusText} - bot tracking failed`);
+      console.error(
+        `[Jillen.Analytics] Server endpoint error: ${response.status} ${response.statusText} - bot tracking failed`
+      );
       return;
     }
   } catch (error) {
     // Log specific error types for debugging
     if (error instanceof TypeError) {
       if (error.message.includes("fetch failed") || error.message.includes("network")) {
-        console.error("[Jillen.Analytics] Network connectivity error in bot tracking:", error.message);
+        console.error(
+          "[Jillen.Analytics] Network connectivity error in bot tracking:",
+          error.message
+        );
       } else {
-        console.error("[Jillen.Analytics] Request configuration error in bot tracking:", error.message);
+        console.error(
+          "[Jillen.Analytics] Request configuration error in bot tracking:",
+          error.message
+        );
       }
     } else if (error instanceof DOMException && error.name === "AbortError") {
       console.error("[Jillen.Analytics] Bot tracking request timeout after 10 seconds");
@@ -159,9 +177,9 @@ export function sendBotVisit(request: NextRequest): void {
   void (async () => {
     try {
       // Extract data from request headers
-      const hostFromHeader = request.headers.get('host') || 'unknown';
+      const hostFromHeader = request.headers.get("host") || "unknown-hostname";
       const website_domain = getSiteIdWithFallback(hostFromHeader);
-      const userAgent = request.headers.get('user-agent') || '';
+      const userAgent = request.headers.get("user-agent") || "";
 
       // Process bot data and create payload
       const botInfo = extractBotInfo(userAgent);
