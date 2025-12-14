@@ -115,86 +115,45 @@ export async function sendPerformanceEvent(payload: PerformanceEvent): Promise<v
 }
 
 /**
- * Internal function to send bot tracking events using standard fetch with timeout
- * Used only by sendBotVisit within this module
+ * Send bot tracking event - truly fire-and-forget
+ *
+ * Bot tracking is non-critical analytics data. We don't need to:
+ * - Wait for the response (data is saved regardless)
+ * - Log timeout errors (they're noise, data still gets saved)
+ * - Block the middleware
+ *
+ * This runs in Edge Runtime (middleware) where:
+ * - Fire-and-forget async might not complete reliably
+ * - Network latency varies by edge location
+ * - We confirmed server responds in ~100ms but edge fetch can timeout
  */
-async function sendBotEvent(payload: BotEvent): Promise<void> {
-  const payloadWithVersion: BotEvent = {
-    ...payload,
+export function sendBotVisit(request: NextRequest): void {
+  // Extract data synchronously before any async operations
+  const hostFromHeader = request.headers.get("host") || "unknown-hostname";
+  const website_domain = getSiteIdWithFallback(hostFromHeader);
+  const userAgent = request.headers.get("user-agent") || "";
+  const botInfo = extractBotInfo(userAgent);
+
+  const payload: BotEvent = {
+    website_domain,
+    user_agent: userAgent,
+    bot_name: botInfo.name,
+    bot_category: botInfo.category,
+    timestamp: new Date().toISOString(),
     sdk_version,
   };
 
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 30000);
-
-    const response = await fetch("https://analytics.jillen.com/api/bot", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "User-Agent": "Jillen-Analytics-SDK/1.0",
-      },
-      mode: "cors",
-      body: JSON.stringify(payloadWithVersion),
-      signal: controller.signal,
-    });
-
-    clearTimeout(timeoutId);
-
-    if (!response.ok) {
-      console.error(
-        `[Jillen.Analytics] Server endpoint error: ${response.status} ${response.statusText} - bot tracking failed`
-      );
-      return;
-    }
-  } catch (error) {
-    // Log specific error types for debugging
-    if (error instanceof TypeError) {
-      if (error.message.includes("fetch failed") || error.message.includes("network")) {
-        console.error(
-          "[Jillen.Analytics] Network connectivity error in bot tracking:",
-          error.message
-        );
-      } else {
-        console.error(
-          "[Jillen.Analytics] Request configuration error in bot tracking:",
-          error.message
-        );
-      }
-    } else if (error instanceof DOMException && error.name === "AbortError") {
-      console.error("[Jillen.Analytics] Bot tracking request timeout after 30 seconds");
-    } else if (error instanceof Error) {
-      console.error("[Jillen.Analytics] Bot tracking error:", error.name, error.message);
-    } else {
-      console.error("[Jillen.Analytics] Unknown error in bot tracking:", error);
-    }
-    // Silent fail - never break the application
-    return;
-  }
-}
-
-export function sendBotVisit(request: NextRequest): void {
-  void (async () => {
-    try {
-      // Extract data from request headers
-      const hostFromHeader = request.headers.get("host") || "unknown-hostname";
-      const website_domain = getSiteIdWithFallback(hostFromHeader);
-      const userAgent = request.headers.get("user-agent") || "";
-
-      // Process bot data and create payload
-      const botInfo = extractBotInfo(userAgent);
-      const botPayload: BotEvent = {
-        website_domain,
-        user_agent: userAgent,
-        bot_name: botInfo.name,
-        bot_category: botInfo.category,
-        timestamp: new Date().toISOString(),
-      };
-
-      // Send the event
-      await sendBotEvent(botPayload);
-    } catch (error) {
-      console.error("[Jillen.Analytics] Error in trackBotVisit:", error);
-    }
-  })();
+  // Fire and completely forget - no await, no timeout, silent failures
+  // The server saves data successfully even if the client times out
+  fetch("https://analytics.jillen.com/api/bot", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "User-Agent": "Jillen-Analytics-SDK/1.0",
+    },
+    body: JSON.stringify(payload),
+  }).catch(() => {
+    // Silent fail - bot tracking is non-critical analytics
+    // Data is typically saved server-side even when fetch "fails" client-side
+  });
 }
