@@ -1,7 +1,4 @@
-import type { NextRequest } from "next/server";
-import type { BaseHumanEvent, BotEvent, PerformanceEvent } from "./event-types";
-import { getSiteIdWithFallback } from "./analytics-host-utils";
-import { extractBotInfo } from "./bot-registry";
+import type { BaseHumanEvent, PerformanceEvent } from "./event-types";
 import { sdk_version } from "./version";
 
 /**
@@ -112,48 +109,4 @@ export async function sendPerformanceEvent(payload: PerformanceEvent): Promise<v
     // Silent fail - never break the application
     return;
   }
-}
-
-/**
- * Send bot tracking event - truly fire-and-forget
- *
- * Bot tracking is non-critical analytics data. We don't need to:
- * - Wait for the response (data is saved regardless)
- * - Log timeout errors (they're noise, data still gets saved)
- * - Block the middleware
- *
- * This runs in Edge Runtime (middleware) where:
- * - Fire-and-forget async might not complete reliably
- * - Network latency varies by edge location
- * - We confirmed server responds in ~100ms but edge fetch can timeout
- */
-export function sendBotVisit(request: NextRequest): void {
-  // Extract data synchronously before any async operations
-  const hostFromHeader = request.headers.get("host") || "unknown-hostname";
-  const website_domain = getSiteIdWithFallback(hostFromHeader);
-  const userAgent = request.headers.get("user-agent") || "";
-  const botInfo = extractBotInfo(userAgent);
-
-  const payload: BotEvent = {
-    website_domain,
-    user_agent: userAgent,
-    bot_name: botInfo.name,
-    bot_category: botInfo.category,
-    timestamp: new Date().toISOString(),
-    sdk_version,
-  };
-
-  // Fire and completely forget - no await, no timeout, silent failures
-  // The server saves data successfully even if the client times out
-  fetch("https://analytics.jillen.com/api/bot", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "User-Agent": "Jillen-Analytics-SDK/1.0",
-    },
-    body: JSON.stringify(payload),
-  }).catch(() => {
-    // Silent fail - bot tracking is non-critical analytics
-    // Data is typically saved server-side even when fetch "fails" client-side
-  });
 }

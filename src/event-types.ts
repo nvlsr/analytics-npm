@@ -11,13 +11,6 @@ export const EVENT_TYPES = {
   HEARTBEAT: 'heartbeat'
 } as const;
 
-export const BOT_CATEGORIES = {
-  SEO: 'SEO',
-  SOCIAL: 'SOCIAL',
-  AI: 'AI',
-  UNKNOWN: 'UNKNOWN'
-} as const;
-
 export const PERFORMANCE_GRADES = {
   GOOD: 'good',
   NEEDS_WORK: 'needs work',
@@ -25,7 +18,6 @@ export const PERFORMANCE_GRADES = {
 } as const;
 
 export type EventType = typeof EVENT_TYPES[keyof typeof EVENT_TYPES];
-export type BotCategory = typeof BOT_CATEGORIES[keyof typeof BOT_CATEGORIES];
 export type PerformanceGrade = typeof PERFORMANCE_GRADES[keyof typeof PERFORMANCE_GRADES];
 
 /**
@@ -89,19 +81,6 @@ export interface ServerEnrichedFields {
  */
 export interface CompleteHumanEvent extends BaseHumanEvent, ServerEnrichedFields {
   // Union of both interfaces
-}
-
-/**
- * Bot event structure
- * Simplified structure for bot traffic
- */
-export interface BotEvent {
-  website_domain: string;
-  user_agent: string;
-  bot_name: string;
-  bot_category: BotCategory;
-  timestamp: string; // ISO datetime
-  sdk_version?: string;
 }
 
 /**
@@ -171,17 +150,13 @@ export interface PerformanceEvent {
 /**
  * Union type for all event types
  */
-export type AnalyticsEvent = CompleteHumanEvent | BotEvent | PerformanceEvent;
+export type AnalyticsEvent = CompleteHumanEvent | PerformanceEvent;
 
 /**
  * Type guards for runtime type checking
  */
-export function isBotEvent(event: unknown): event is BotEvent {
-  return typeof event === 'object' && event !== null && 'bot_name' in event;
-}
-
 export function isHumanEvent(event: unknown): event is BaseHumanEvent {
-  return typeof event === 'object' && event !== null && 
+  return typeof event === 'object' && event !== null &&
     'event_type' in event && 'session_id' in event;
 }
 
@@ -191,8 +166,4 @@ export function isPerformanceEvent(event: unknown): event is PerformanceEvent {
 
 export function isValidEventType(type: string): type is EventType {
   return Object.values(EVENT_TYPES).includes(type as EventType);
-}
-
-export function isValidBotCategory(category: string): category is BotCategory {
-  return Object.values(BOT_CATEGORIES).includes(category as BotCategory);
 }

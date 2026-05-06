@@ -1,7 +1,7 @@
 {
   "name": "@jillen/analytics",
-  "version": "4.0.35",
-  "description": "Advanced analytics package for Next.js applications with bot detection and comprehensive tracking",
+  "version": "5.0.0",
+  "description": "Lightweight human-visit and Web Vitals analytics for React apps. Framework-agnostic core with a Next.js adapter.",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
@@ -11,15 +11,16 @@
       "import": "./dist/index.mjs",
       "require": "./dist/index.js"
     },
-    "./server": {
-      "types": "./dist/server.d.ts",
-      "import": "./dist/server.mjs",
-      "require": "./dist/server.js"
+    "./next": {
+      "types": "./dist/next.d.ts",
+      "import": "./dist/next.mjs",
+      "require": "./dist/next.js"
     }
   },
   "files": [
     "dist",
     "README.md",
+    "CHANGELOG.md",
     "LICENSE"
   ],
   "scripts": {
@@ -31,10 +32,12 @@
   },
   "keywords": [
     "analytics",
-    "nextjs",
     "tracking",
-    "bot-detection",
     "web-analytics",
+    "web-vitals",
+    "react",
+    "nextjs",
+    "vite",
     "typescript"
   ],
   "author": "Jillen",
@@ -42,6 +45,11 @@
   "peerDependencies": {
     "next": ">=13.0.0",
     "react": ">=18.0.0"
+  },
+  "peerDependenciesMeta": {
+    "next": {
+      "optional": true
+    }
   },
   "dependencies": {
     "isbot": "^5.1.31",

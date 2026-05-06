@@ -11,10 +11,7 @@ const commonConfig = {
     'react/jsx-runtime',
     'react/jsx-dev-runtime',
     'next',
-    'next/server',
     'next/navigation',
-    'next/router',
-    'next/head'
   ],
   splitting: false,
   treeshake: true,
@@ -23,8 +20,7 @@ const commonConfig = {
   outDir: 'dist',
 }
 
-function injectUseClient() {
-  const files = ['dist/index.js', 'dist/index.mjs']
+function injectUseClient(files: string[]) {
   files.forEach(file => {
     try {
       const content = readFileSync(file, 'utf8')
@@ -33,7 +29,7 @@ function injectUseClient() {
         console.log(`✓ Injected "use client" into ${file}`)
       }
     } catch (e) {
-      console.log(`⚠ Could not inject into ${file}:`, e.message)
+      console.log(`⚠ Could not inject into ${file}:`, (e as Error).message)
     }
   })
 }
@@ -44,16 +40,17 @@ export default defineConfig([
     entry: { index: 'src/index.ts' },
     clean: true,
     onSuccess: async () => {
-      console.log('Client bundle built successfully!')
-      injectUseClient()
+      console.log('Default (framework-agnostic) bundle built!')
+      injectUseClient(['dist/index.js', 'dist/index.mjs'])
     },
   },
   {
     ...commonConfig,
-    entry: { server: 'src/server.ts' },
+    entry: { next: 'src/next.ts' },
     clean: false,
     onSuccess: async () => {
-      console.log('Server bundle built successfully!')
+      console.log('Next.js adapter bundle built!')
+      injectUseClient(['dist/next.js', 'dist/next.mjs'])
     },
-  }
-]) 
+  },
+])

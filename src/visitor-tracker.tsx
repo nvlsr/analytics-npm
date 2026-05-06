@@ -1,7 +1,6 @@
 "use client";
 
 import { isbot } from "isbot";
-import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useRef } from "react";
 import type { BaseHumanEvent, PerformanceEvent } from "./event-types";
 import { getSiteIdWithFallback } from "./analytics-host-utils";
@@ -182,10 +181,42 @@ function getClientData(username?: string | null) {
 
 export interface VisitorTrackerProps {
   username?: string | null;
+  /**
+   * Current route pathname. Required — pass from your router:
+   *
+   *   • Next.js:        `usePathname()` from `next/navigation`
+   *                     (or use the `@jillen/analytics/next` adapter,
+   *                     which wires this for you).
+   *   • React Router:   `useLocation().pathname`
+   *   • TanStack Router: `useRouterState({ select: s => s.location.pathname })`
+   *   • Astro / vanilla: `window.location.pathname` and re-render on
+   *                     route change.
+   */
+  pathname: string;
 }
 
-export function VisitorTracker({ username }: VisitorTrackerProps) {
-  const pathname = usePathname();
+export function VisitorTracker({
+  username,
+  pathname: rawPathname,
+}: VisitorTrackerProps) {
+  // Runtime guard for JS callers who skip TypeScript. We always run the
+  // hooks below (Rules of Hooks) but no-op the side-effects when the
+  // pathname prop isn't a string.
+  const pathnameInvalid = typeof rawPathname !== "string";
+  const pathname = pathnameInvalid ? "" : rawPathname;
+  const warnedRef = useRef<boolean>(false);
+  useEffect(() => {
+    if (pathnameInvalid && !warnedRef.current && typeof window !== "undefined") {
+      warnedRef.current = true;
+      console.error(
+        "[Analytics] VisitorTracker requires a `pathname` prop. " +
+          "For Next.js, import from '@jillen/analytics/next' (auto-pathname). " +
+          "For other routers, pass `pathname` from your router state " +
+          "(e.g. `useLocation().pathname` from react-router-dom)."
+      );
+    }
+  }, [pathnameInvalid]);
+
   const isInitialized = useRef<boolean>(false);
   const lastTrackedPath = useRef<string>(pathname);
   const heartbeatInterval = useRef<NodeJS.Timeout | undefined>(undefined);
@@ -430,6 +461,8 @@ export function VisitorTracker({ username }: VisitorTrackerProps) {
     if (lastTrackedPath.current !== pathname) {
       perfEventSent.current = false;
     }
+
+    if (pathnameInvalid) return;
 
     if (process.env.NODE_ENV !== "production") return;
 

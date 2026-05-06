@@ -1,135 +1,79 @@
 # @jillen/analytics
 
-Advanced analytics package for Next.js applications with intelligent bot detection, comprehensive visitor tracking, and Web Vitals performance monitoring.
+Lightweight human-visit and Web Vitals analytics for React apps. Framework-agnostic core with a Next.js adapter — works with Next.js, Vite, React Router, TanStack Router, Astro, and any other React-based setup.
 
-## Features
+Sends events to `https://analytics.jillen.com`.
 
-- 🤖 **Smart Bot Detection**: Advanced bot filtering using comprehensive bot registry and multiple detection methods
-- 📊 **Comprehensive Tracking**: Detailed visitor analytics with geolocation and device info
-- ⚡ **Web Vitals Monitoring**: Automatic collection of Core Web Vitals (CLS, FID, LCP, FCP, TTFB, INP)
-- 🚀 **Next.js Optimized**: Built specifically for Next.js 13+ with App Router support
-- 📱 **Mobile-First**: Responsive tracking with mobile device detection
-- 🔒 **Privacy-Focused**: GDPR compliant with DNT (Do Not Track) support
-- 🏎️ **Performance-First**: Lightweight, non-blocking analytics with fire-and-forget tracking
-- 🌍 **Zero-Config**: No environment variables required - works out of the box
-- 🔧 **Next.js 15+ Compatible**: Proper client/server separation prevents build errors
+## What it tracks
 
-# Analytics Package Integration Guide
+- **Page views** on initial mount and on every route change.
+- **Sessions** with a 30-minute idle timeout. Heartbeats fire at 15s → 60s → 5m → 15m intervals while the user is active; pause when the tab is hidden.
+- **Web Vitals**: Largest Contentful Paint, Cumulative Layout Shift, Interaction to Next Paint, plus navigation-timing breakdown and resource analysis.
+- **Visitor identity**: localStorage-based fingerprint for anonymous users; deterministic id when you pass `username`.
 
-## Prerequisites
+Tracking only fires when `process.env.NODE_ENV === "production"`. No requests in dev.
 
-**Next.js project** with middleware and app router support
-
-## Important: Client/Server Separation
-
-This package uses separate entry points for client and server code to ensure compatibility with Next.js 15+:
-
-- **Client components**: Import from `@jillen/analytics`
-- **Server utilities**: Import from `@jillen/analytics/server`
-
-This prevents build errors like "usePathname is not exported from 'next/navigation'" in Next.js 15.3.1+.
+JS-running bots (Puppeteer, Playwright, headless Chromium) are filtered out client-side via [`isbot`](https://www.npmjs.com/package/isbot); their events are not sent.
 
 ## Installation
 
-## Implementation Steps
-
-### Step 1: Install Package
-
 ```bash
-npm install @jillen/analytics
-# or
 bun add @jillen/analytics
+# or
+npm install @jillen/analytics
 ```
 
-### Step 2: Update Middleware
+## Usage
 
-Add the setupAnalyticsMiddleware utility to your middleware
+The component returns `null` (renders no DOM). Mount it once near the root of your app — re-renders on route changes drive the page-view tracking.
 
-```typescript
-// middleware.ts
-import { NextResponse } from 'next/server';
-import type { NextRequest } from 'next/server';
-import { setupAnalyticsMiddleware } from '@jillen/analytics/server';
+### Vite + React Router
 
-export function middleware(request: NextRequest) {
-  // Setup analytics (pathname header + bot tracking)
-  const { headers } = setupAnalyticsMiddleware(request);
-
-  return NextResponse.next({
-    request: { headers },
-  });
-}
-
-export const config = {
-  matcher: [
-    '/((?!api|_next/static|_next/image|favicon.ico).*)',
-  ],
-};
-```
-
-### Step 3: Create Client Analytics Component
-
-Create a client component to handle analytics:
-
-```typescript
-// components/analytics-provider.tsx
-"use client";
-import { VisitorTracker } from '@jillen/analytics';
-import { useUser } from "@clerk/nextjs"; // or your auth system
+```tsx
+// src/components/analytics-provider.tsx
+import { VisitorTracker } from "@jillen/analytics"
+import { useLocation } from "react-router-dom"
 
 export function AnalyticsProvider() {
-  const { isLoaded, user } = useUser();
-
-  // Wait for auth to load before initializing analytics
-  if (!isLoaded) {
-    return null;
-  }
-
-  // Use username, fallback to user ID, or null for anonymous
-  const username = user?.username ?? user?.id ?? null;
-
-  return <VisitorTracker username={username} />;
+  const { pathname } = useLocation()
+  return <VisitorTracker pathname={pathname} />
 }
 ```
 
-**Alternative auth systems:**
+```tsx
+// src/App.tsx
+import { Routes, Route } from "react-router-dom"
+import { AnalyticsProvider } from "@/components/analytics-provider"
 
-```typescript
-// For NextAuth.js
-import { useSession } from "next-auth/react";
-
-export function AnalyticsProvider() {
-  const { status, data: session } = useSession();
-  
-  if (status === "loading") return null;
-  
-  const username = session?.user?.email ?? session?.user?.id ?? null;
-  return <VisitorTracker username={username} />;
-}
-
-// For Supabase Auth
-import { useUser } from "@supabase/auth-helpers-react";
-
-export function AnalyticsProvider() {
-  const user = useUser();
-  const username = user?.email ?? user?.id ?? null;
-  return <VisitorTracker username={username} />;
+export function App() {
+  return (
+    <>
+      <AnalyticsProvider />
+      <Routes>{/* ... */}</Routes>
+    </>
+  )
 }
 ```
 
-### Step 4: Update Root Layout
+### Next.js (App Router)
 
-Add analytics tracking to your layout:
+Import from the `/next` sub-path — it wires up `usePathname()` for you:
 
-```typescript
+```tsx
+// app/lib/analytics-provider.tsx
+"use client"
+import { VisitorTracker } from "@jillen/analytics/next"
+
+export function AnalyticsProvider() {
+  return <VisitorTracker />
+}
+```
+
+```tsx
 // app/layout.tsx
-import { AnalyticsProvider } from "@/components/analytics-provider";
+import { AnalyticsProvider } from "./lib/analytics-provider"
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
       <body>
@@ -137,92 +81,75 @@ export default function RootLayout({
         {children}
       </body>
     </html>
-  );
+  )
 }
 ```
 
-### Step 5: Deploy
+### TanStack Router
 
-Deploy to production. Analytics automatically:
-- ✅ **Detects bots** and tracks them separately
-- ✅ **Collects Web Vitals** performance metrics
-- ✅ **Tracks user sessions** and page views
-- ✅ **Works in production only** (disabled in development)
+```tsx
+import { VisitorTracker } from "@jillen/analytics"
+import { useRouterState } from "@tanstack/react-router"
 
-## What Gets Tracked
+export function AnalyticsProvider() {
+  const pathname = useRouterState({ select: (s) => s.location.pathname })
+  return <VisitorTracker pathname={pathname} />
+}
+```
 
-### 📊 **User Analytics**
-- Page views and session tracking
-- User identification (if username provided)
-- Device info (screen resolution, viewport, mobile detection)
-- Geographic data (via Vercel headers)
-- Referrer information
+### Identifying users
 
-### ⚡ **Performance Metrics**
-- **Core Web Vitals**: CLS, LCP, FID/INP
-- **Loading Metrics**: FCP, TTFB
-- **Resource Performance**: Automatic classification and timing
-- **User Experience**: Real user monitoring data
+Pass a `username` to associate visits with an authenticated user. The id is normalised (lowercased, alphanumeric-with-dashes) and persists in localStorage. Read the user info from your auth library and forward whatever string you want to use as the visitor id:
 
-### 🤖 **Bot Detection**
-- Comprehensive bot registry (search engines, social crawlers, monitoring tools)
-- Separate tracking pipeline for bot visits
-- Protection against analytics pollution
+```tsx
+// Clerk
+const { user } = useUser()
+const username = user?.username ?? user?.id ?? null
 
-## API Reference
+// NextAuth
+const { data: session } = useSession()
+const username = session?.user?.name ?? session?.user?.email ?? null
 
-### Components
+// Supabase
+const user = useUser()
+const username = user?.email ?? user?.id ?? null
 
-#### `VisitorTracker`
-```typescript
+return <VisitorTracker username={username} pathname={pathname} />
+```
+
+`null` (or omitted) = anonymous visitor, fingerprinted via locally-cached browser characteristics.
+
+## API
+
+### Default entry — `@jillen/analytics`
+
+```ts
 interface VisitorTrackerProps {
-  username?: string | null; // Optional user identifier
+  username?: string | null
+  pathname: string
 }
+declare function VisitorTracker(props: VisitorTrackerProps): null
 ```
 
-### Server Functions
+### Next.js adapter — `@jillen/analytics/next`
 
-#### `setupAnalyticsMiddleware(request: NextRequest)`
-Sets up analytics middleware for automatic bot detection and header processing.
+Same component, with `pathname` wired from `usePathname()`:
 
-**Import from server entry point:**
-```typescript
-import { setupAnalyticsMiddleware } from '@jillen/analytics/server';
+```ts
+interface VisitorTrackerProps {
+  username?: string | null
+}
+declare function VisitorTracker(props: VisitorTrackerProps): null
 ```
 
-### TypeScript Types
+## Migrating from v4
 
-Export types for custom implementations:
-- `BaseEventData`
-- `HumanEventData` 
-- `PerformanceEventData`
-- `BotEventData`
-- `ServerEnrichedFields`
+See [CHANGELOG.md](./CHANGELOG.md). Short version:
 
-## Migration from v4.0.14 and Earlier
+- **Next.js consumers**: change `from "@jillen/analytics"` → `from "@jillen/analytics/next"`. Remove any `setupAnalyticsMiddleware` calls (the `/server` entry no longer exists).
+- **Other React apps**: import from default and pass `pathname` from your router.
+- **Bot tracking** is removed in v5. Bot data was noisy in practice. Client-side bot filtering still works — JS-running bots' events still get suppressed before reaching the network.
 
-If upgrading from versions before 4.0.15, update your server imports:
+## License
 
-```diff
-// middleware.ts
-- import { setupAnalyticsMiddleware } from '@jillen/analytics';
-+ import { setupAnalyticsMiddleware } from '@jillen/analytics/server';
-```
-
-Client component imports remain unchanged:
-```typescript
-// components/analytics-provider.tsx
-import { VisitorTracker } from '@jillen/analytics'; // ✅ No change needed
-```
-
-## Troubleshooting
-
-### Build Errors in Next.js 15+
-
-If you see errors like:
-- "usePathname is not exported from 'next/navigation'"
-- "useRef is not exported from 'react'"
-
-**Solution**: Ensure you're using the correct import paths:
-- Server code: `import { setupAnalyticsMiddleware } from '@jillen/analytics/server'`
-- Client components: `import { VisitorTracker } from '@jillen/analytics'`
+MIT
